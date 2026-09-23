@@ -29,9 +29,7 @@ Every save is loaded back and compared with the original before it is kept.
 **Loading is strict about versions.** A model loads only under the yohou version it was
 saved with, and under the same major and minor versions of scikit-learn and polars.
 Upgrading yohou therefore means refitting saved forecasters, or loading them with
-`strict=False`. This answers part of
-[yohou#214](https://github.com/stateful-y/yohou/issues/214); loading under newer yohou
-versions is planned as a yohou change.
+`strict=False`.
 
 Yohou-MLflow supports Python 3.11 to 3.14, MLflow 3, and yohou 0.1.
 
