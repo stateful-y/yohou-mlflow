@@ -43,7 +43,7 @@ The signature declares these params (`yohou_mlflow.PARAM_NAMES`):
 
 | Param | Type | Default | Meaning |
 |---|---|---|---|
-| `prediction_type` | string | `default_prediction_type` from `MLmodel` | One of `point`, `interval`, `class_proba` |
+| `prediction_type` | string | `default_prediction_type` from `MLmodel` | One of `point`, `interval`, `class_proba` (`yohou_mlflow.PREDICTION_TYPES`) |
 | `forecasting_horizon` | integer | `None` | Steps to forecast; `None` uses the fitted horizon |
 | `coverage_rates` | list of float | `[]` | Interval coverage rates; `[]` uses the forecaster's default. `interval` only |
 | `groups` | list of string | `[]` | Panel groups to predict; `[]` predicts all groups |

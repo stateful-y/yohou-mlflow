@@ -1,14 +1,17 @@
 # How to Move Pickled Forecasters to the Yohou Flavour
 
 This guide shows you how to re-save forecasters you stored with pickle, for example
-through MLflow's generic Python model, as yohou-flavour models.
+through MLflow's generic Python model, as yohou-flavour models. Use it when a job still
+logs yohou forecasters with `mlflow.sklearn` or a custom `mlflow.pyfunc.PythonModel`.
 
 ## Prerequisites
 
 - The environment that saved the pickles, with the same yohou, scikit-learn and polars
-  versions. A pickle may not load, or may load and misbehave, anywhere else.
+  versions
 - yohou-mlflow installed in that environment
 - Pickles you trust: loading a pickle runs code from the file
+
+A pickle may not load, or may load and misbehave, in any other environment.
 
 ## Steps
 
@@ -82,3 +85,5 @@ Replace the loading code in your scheduled jobs with
 ## See Also
 
 - [How to check that a registered model will load](check-before-deploying.md)
+- [Saved model format](../reference/saved-model-format.md): what the re-saved model contains
+- [Concepts](../explanation/concepts.md): why pickled forecasters break across yohou versions

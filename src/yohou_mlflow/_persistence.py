@@ -16,7 +16,7 @@ import shutil
 import warnings
 import zipfile
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -145,7 +145,9 @@ def save_model(
     sklearn.exceptions.NotFittedError
         If ``forecaster`` is not fitted. Nothing is written.
     ValueError
-        If ``signature`` has an input schema or redefines a flavour param.
+        If ``signature`` has an input schema or redefines a flavour param, or the
+        forecaster supports none of the ``point``, ``interval`` and ``class_proba``
+        prediction types.
     UntrustedTypesError
         If the forecaster holds types outside the trust policy and
         ``extra_trusted_types``.
@@ -494,8 +496,8 @@ class CompatibilityReport:
     loadable: bool
     problems: tuple[str, ...]
     format_version: str
-    version_mismatches: tuple[VersionMismatch, ...] = field(default=())
-    untrusted_types: tuple[str, ...] = field(default=())
+    version_mismatches: tuple[VersionMismatch, ...] = ()
+    untrusted_types: tuple[str, ...] = ()
 
     def __str__(self) -> str:
         """Summarize the report in a few lines.

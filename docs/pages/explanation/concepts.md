@@ -72,7 +72,8 @@ being checked. Yohou-MLflow keeps its trust policy in code instead: any class fr
 yohou or scikit-learn, polars frames and dtypes, and date and time types. The user
 already runs yohou's and scikit-learn's code, so trusting their classes adds no new
 source of code. Anything else, such as an estimator class from your own project, must
-be named by the caller, when saving and again on every load. The type list recorded in
+be named by the caller, when saving and again on every load (see
+[How to save a forecaster that contains your own estimator classes](../how-to/trust-third-party-estimators.md)). The type list recorded in
 `MLmodel` is only there to be read.
 
 The same reasoning rules out bundled code. MLflow flavours usually let a model carry a
@@ -143,9 +144,10 @@ forecasting 28 days ahead from three years of daily data, measured on one laptop
 | `Ridge` | 17 KiB | 0.03 s / 0.01 s | 3 ms / 4 ms |
 | `HistGradientBoostingRegressor` (100 iterations) | 6.6 MiB | 2.22 s / 1.57 s | 70 ms / 78 ms |
 
-The time costs are small next to a scheduled job's run time. The load-back check adds
-about 40 percent to a save, and the per-call copy about a quarter of a generic prediction
-for the larger model. The size is what accumulates: a daily job registering the
+The time costs are small next to a scheduled job's run time. For the larger model, the
+load-back check adds about 40 percent to a save, and the per-call copy about a quarter of
+a generic prediction. For `Ridge` they add about 20 ms and under 1 ms, which is
+large in proportion but small in absolute terms. The size is what accumulates: a daily job registering the
 gradient-boosting forecaster adds about 2.4 GiB a year, which is why
 [keeping the registry small](../how-to/keep-the-registry-small.md) matters, and why
 storing the fitted estimators only once is the natural next step for the format.
@@ -157,4 +159,5 @@ storing the fitted estimators only once is the natural next step for the format.
 - [pyfunc contract](../reference/pyfunc-contract.md): every input, param and error of the
   generic interface
 - [How to check that a registered model will load](../how-to/check-before-deploying.md)
+- [How to move pickled forecasters to the yohou flavour](../how-to/migrate-from-pickle.md)
 - [Security](security.md): how this package's releases are published and verified

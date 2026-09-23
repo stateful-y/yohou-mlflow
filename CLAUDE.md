@@ -33,6 +33,39 @@ Source lives in `src/yohou_mlflow/`, tests in `tests/`.
   with plain `[1]` citations, never reStructuredText (`.. [1]` or `[1]_`), which
   renders literally on the generated API pages.
 
+## Package rules
+
+- **Loading never runs code chosen by the file.** The trust policy lives in
+  `src/yohou_mlflow/_trust.py` and can only be extended by the caller
+  (`extra_trusted_types`). The type list recorded in `MLmodel` never grants trust.
+  Models carry no bundled code: `code_paths` was removed, and loading never touches
+  the import path, because a model's `code/` directory could otherwise shadow a trusted
+  package such as `yohou`. The guarantee covers `load_model` and `check_compatibility`
+  only. `mlflow.pyfunc.load_model` imports what `MLmodel` names before this package runs.
+- **Loading is strict about versions**: yohou must match exactly, scikit-learn and
+  polars by major and minor version. Migrations across yohou versions belong in yohou
+  itself, not here.
+- **Every save is loaded back and compared** before it is kept. skops 0.15.0 cannot
+  rebuild `zoneinfo.ZoneInfo`, so forecasters fitted on time-zone-aware data are refused
+  at save time until a skops release fixes it (skops-dev/skops#545).
+- **Only public yohou API.** Reading private yohou attributes would break on any yohou
+  rename. The private `mlflow.utils` helpers in `_persistence.py` were checked on
+  mlflow-skinny 3.0.0 and 3.16.1.
+
+## What a failing check means
+
+- `codecov/patch` targets the base branch's coverage, which is 100%, so every new line
+  and branch under `src/` needs a test.
+- The pre-push `interrogate` hook scores each changed `src/` file on its own: a file
+  with undocumented private helpers fails once it is the only file changed.
+- Tests run from `tmp_path` (an autouse fixture in `tests/conftest.py`) because MLflow
+  writes `mlflow.db` and `mlruns/` to the working directory.
+- A local Zensical docs build can silently skip pages when the host runs out of inotify
+  instances. Trust the CI docs build, or build in a clean container.
+
+The OpenSpec specs for this package (`openspec/specs/`) are gitignored and exist only
+locally.
+
 ## What to record here
 
 The things a newcomer cannot derive from the code: why a dependency is pinned, which

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from yohou_mlflow._versions import VersionMismatch
+from yohou_mlflow._versions import VersionMismatch, describe_mismatches
 
 
 class YohouMlflowError(Exception):
@@ -58,8 +56,6 @@ class VersionMismatchError(YohouMlflowError):
     """
 
     def __init__(self, mismatches: Sequence[VersionMismatch]) -> None:
-        from yohou_mlflow._versions import describe_mismatches
-
         self.mismatches = tuple(mismatches)
         super().__init__(describe_mismatches(self.mismatches))
 

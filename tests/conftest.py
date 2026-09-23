@@ -118,14 +118,17 @@ class Case:
         return self.data[FIT_END - 100 : FIT_END + 5]
 
 
-def make_case(family: str) -> Case:
-    """Fit a fresh forecaster of ``family`` and observe rows after fitting."""
-    forecaster, data, horizon = _build(family)
+def _fit_and_observe(family: str, forecaster: Any, data: pl.DataFrame, horizon: int) -> Case:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         forecaster.fit(data[:FIT_END], forecasting_horizon=horizon)
         forecaster.observe(data[FIT_END:OBSERVED_END])
     return Case(family, forecaster, data, horizon)
+
+
+def make_case(family: str) -> Case:
+    """Fit a fresh forecaster of ``family`` and observe rows after fitting."""
+    return _fit_and_observe(family, *_build(family))
 
 
 @pytest.fixture(params=FAMILIES)
@@ -163,13 +166,7 @@ def local_ridge_case() -> Case:
     """A point forecaster whose regressor is a class outside the trust policy."""
     from local_estimators import LocalRidge
 
-    forecaster = PointReductionForecaster(estimator=LocalRidge())
-    data = make_series()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        forecaster.fit(data[:FIT_END], forecasting_horizon=HORIZON)
-        forecaster.observe(data[FIT_END:OBSERVED_END])
-    return Case("point", forecaster, data, HORIZON)
+    return _fit_and_observe("point", PointReductionForecaster(estimator=LocalRidge()), make_series(), HORIZON)
 
 
 @pytest.fixture
