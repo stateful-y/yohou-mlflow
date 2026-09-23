@@ -8,6 +8,7 @@ from pathlib import Path
 import mlflow
 import pytest
 import skops.io
+import yaml
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.exceptions import NotFittedError
 from sklearn.linear_model import Ridge
@@ -399,3 +400,55 @@ def test_every_family_saves_within_policy() -> None:
     for family in ("point", "interval", "class_proba", "panel", "composite"):
         types = skops.io.get_untrusted_types(data=skops.io.dumps(make_case(family).forecaster))
         assert untrusted_outside_policy(types) == [], family
+
+
+# -- Options and edge cases ---------------------------------------------------------
+
+
+def test_metadata_is_stored(point_case: Case, tmp_path: Path) -> None:
+    """``metadata`` lands in the ``MLmodel`` file."""
+    path = _saved(point_case, tmp_path, metadata={"owner": "forecasting"})
+    assert yaml.safe_load((path / "MLmodel").read_text())["metadata"] == {"owner": "forecasting"}
+
+
+def test_conda_env_replaces_the_default_environment(point_case: Case, tmp_path: Path) -> None:
+    """A ``conda_env`` is written as given, with its pip section as the requirements."""
+    conda_env = {"name": "forecasting", "dependencies": ["python=3.12", {"pip": ["yohou_mlflow", "yohou"]}]}
+    path = _saved(point_case, tmp_path, conda_env=conda_env)
+    assert yaml.safe_load((path / "conda.yaml").read_text())["name"] == "forecasting"
+    requirements = (path / "requirements.txt").read_text().splitlines()
+    # MLflow adds its own pin; the rest is the conda_env's pip section, not the defaults.
+    assert [r for r in requirements if not r.startswith("mlflow==")] == ["yohou_mlflow", "yohou"]
+
+
+def test_constraints_file_is_written(point_case: Case, tmp_path: Path) -> None:
+    """A ``-c`` entry in the requirements produces ``constraints.txt``."""
+    constraints = tmp_path / "constraints.txt"
+    constraints.write_text("polars<2\n")
+    path = _saved(point_case, tmp_path, extra_pip_requirements=[f"-c {constraints}"])
+    assert (path / "constraints.txt").read_text() == "polars<2"
+    assert "-c constraints.txt" in (path / "requirements.txt").read_text()
+
+
+def test_non_numeric_format_version_refused(point_case: Case, tmp_path: Path) -> None:
+    """A format version that does not start with a number is refused."""
+    path = _saved(point_case, tmp_path)
+    edit_flavor(path, format_version="next")
+    with pytest.raises(FormatVersionError, match="next"):
+        yohou_mlflow.load_model(str(path))
+
+
+def test_unparseable_versions_compare_as_text() -> None:
+    """A version that is not PEP 440 is compared as a whole string."""
+    base = {"yohou": "0.1.0a13", "scikit-learn": "1.9.1", "polars": "main", "skops": "0.15.0", "yohou-mlflow": "9"}
+    assert compare_versions({"polars": "main"}, base) == []
+    assert [m.package for m in compare_versions({"polars": "dev"}, base)] == ["polars"]
+
+
+def test_compatibility_report_text(point_case: Case, tmp_path: Path) -> None:
+    """The report states loadability, or lists each problem."""
+    path = _saved(point_case, tmp_path)
+    assert str(yohou_mlflow.check_compatibility(str(path))) == "Loadable: a strict load_model would succeed."
+    edit_flavor(path, versions=dict(read_flavor(path)["versions"], yohou="0.0.0"))
+    text = str(yohou_mlflow.check_compatibility(str(path)))
+    assert text.startswith("Not loadable:\n  - A strict load would refuse the model")

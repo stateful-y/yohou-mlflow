@@ -11,11 +11,13 @@ import pytest
 import yaml
 from mlflow.models import ModelSignature
 from mlflow.types.schema import ColSpec, ParamSchema, ParamSpec, Schema
+from sklearn.base import BaseEstimator
 from yohou.point import PointReductionForecaster
 
 import yohou_mlflow
 from conftest import HORIZON, Case
 from yohou_mlflow import UntrustedTypesError, YohouMlflowError
+from yohou_mlflow._pyfunc import default_prediction_type, supported_prediction_types
 
 
 def _pyfunc(case: Case, tmp_path: Path, **kwargs):
@@ -264,3 +266,24 @@ def test_saved_load_options_cannot_extend_trust(local_ridge_case: Case, local_ri
     (path / "MLmodel").write_text(yaml.safe_dump(mlmodel))
     with pytest.raises(YohouMlflowError, match="cannot choose its own trust"):
         mlflow.pyfunc.load_model(str(path))
+
+
+# -- Prediction type discovery ------------------------------------------------------
+
+
+class _UntaggedIntervalForecaster(BaseEstimator):
+    """An estimator with no ``forecaster_type`` tag that defines ``predict_interval``."""
+
+    def predict_interval(self):
+        """Return nothing; only the method's presence matters."""
+
+
+def test_prediction_types_fall_back_to_methods() -> None:
+    """Without a ``forecaster_type`` tag, supported types come from the methods defined."""
+    assert supported_prediction_types(_UntaggedIntervalForecaster()) == frozenset({"interval"})
+
+
+def test_no_supported_prediction_type() -> None:
+    """A forecaster supporting no prediction type has no default."""
+    with pytest.raises(ValueError, match="supports none of the prediction types"):
+        default_prediction_type(frozenset())
