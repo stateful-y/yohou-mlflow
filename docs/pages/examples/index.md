@@ -12,7 +12,7 @@ walk through a topic step-by-step, while **How-to Guides** solve a specific task
 just example
 
 # Run as script
-python examples/hello.py
+python examples/registry_loop.py
 ```
 
 ## Next Steps

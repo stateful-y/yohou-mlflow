@@ -21,11 +21,19 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-
-    "numpy>=2.3.0",
-    "pandas>=2.2.0",
-    "plotly>=6.5.0",
-
+    # The tracking client and model APIs without the server and UI. 3.0 is the first
+    # release whose `log_model` takes `name=`.
+    "mlflow-skinny>=3.0,<4",
+    # Not used by this package. `import mlflow.pyfunc` fails without it and
+    # mlflow-skinny does not depend on it. 2.2.2 is the first release built for NumPy 2.
+    "pandas>=2.2.2",
+    # Parses the recorded versions for the major.minor comparison. Already required by
+    # mlflow-skinny and skops; declared because this package imports it directly.
+    "packaging>=17.0",
+    # 0.9 and 0.10 break on NumPy 2 and current scikit-learn; 0.11 cannot rebuild a
+    # plain `datetime`. Checked with a lowest-direct install.
+    "skops>=0.12.0",
+    "yohou>=0.1.0a13,<0.2.0",
 ]
 
 [dependency-groups]
@@ -44,6 +52,9 @@ tests = [
     "pytest-xdist>=3.8",
     "covdefaults>=2.3",
     "hypothesis>=6.100",
+    # The full distribution, for a SQLite-backed tracking server and model registry
+    # under tmp_path. Runtime depends on mlflow-skinny only.
+    "mlflow>=3.0,<4",
 ]
 lint = [
     "interrogate>=1.7.0",
@@ -122,6 +133,8 @@ examples = [
     # the version that fixes two published advisories. Lowering this floor puts those
     # CVEs back in the lockfile of every project that generates examples.
     "marimo>=0.23.16",
+    # The example notebooks log to a local SQLite-backed registry.
+    "mlflow>=3.0,<4",
 ]
 
 [project.urls]

@@ -245,13 +245,17 @@ nav:
     - Getting Started: pages/tutorials/getting-started.md
   - How-to Guides:
     - pages/how-to/index.md
-    - Configuration: pages/how-to/configure.md
+    - Check Before Deploying: pages/how-to/check-before-deploying.md
+    - Forecast with pyfunc: pages/how-to/predict-with-pyfunc.md
+    - Trust Your Own Estimators: pages/how-to/trust-third-party-estimators.md
+    - Keep the Registry Small: pages/how-to/keep-the-registry-small.md
+    - Migrate from Pickle: pages/how-to/migrate-from-pickle.md
     - Contributing: pages/how-to/contribute.md
   - Examples:
     - pages/examples/index.md
   - Explanation:
     - pages/explanation/index.md
-    - Concepts: pages/explanation/concepts.md
+    - About Saving Forecasters: pages/explanation/concepts.md
     - Security: pages/explanation/security.md
   # Reference is last on purpose: it is the section you arrive at knowing what
   # you want, so it earns its place by being findable, not by being passed
@@ -261,6 +265,8 @@ nav:
   - Reference:
     - pages/reference/index.md
     - API: pages/reference/api.md
+    - Saved Model Format: pages/reference/saved-model-format.md
+    - pyfunc Contract: pages/reference/pyfunc-contract.md
     - Changelog: pages/reference/changelog.md
     - Citation: pages/reference/citation.md
 
