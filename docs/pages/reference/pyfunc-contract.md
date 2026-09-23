@@ -17,6 +17,10 @@ model = mlflow.pyfunc.load_model(model_uri, model_config=None)
 MLflow drops any other key with a warning. The loading checks are those of
 `load_model`; see [Saved model format](saved-model-format.md#load-order).
 
+Before those checks run, MLflow imports the `loader_module` and any `code` directory
+named in the model's `flavors.python_function`. Only models you trust should be loaded
+this way; check others with `check_compatibility` first.
+
 ## `predict(model_input, params=None)`
 
 ### Input

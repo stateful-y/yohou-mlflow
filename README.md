@@ -21,8 +21,10 @@ load the latest version, observe new data, forecast, and register the update for
 next run.
 
 Forecasters are stored with [skops](https://skops.readthedocs.io/) instead of pickle, so
-loading never runs code chosen by the file. Every save is loaded back and compared with
-the original before it is kept.
+`yohou_mlflow.load_model` never runs code chosen by the file. MLflow's generic
+`mlflow.pyfunc.load_model` imports the modules a model file names, so load a model you have
+not reviewed with `yohou_mlflow.load_model`, or check it first with `check_compatibility`.
+Every save is loaded back and compared with the original before it is kept.
 
 **Loading is strict about versions.** A model loads only under the yohou version it was
 saved with, and under the same major and minor versions of scikit-learn and polars.
@@ -37,8 +39,9 @@ Yohou-MLflow supports Python 3.11 to 3.14, MLflow 3, and yohou 0.1.
 
 - **MLflow flavour**: `save_model`, `log_model` and `load_model` for point, interval,
   class-probability, panel and composite forecasters, with model registry support.
-- **No code execution on load**: a fixed trust policy decides which types a saved
-  model may contain; the model file cannot extend it.
+- **No code execution on load**: `yohou_mlflow.load_model` never imports code the model
+  file names, and a fixed trust policy decides which types a saved model may contain; the
+  model file cannot extend it.
 - **Save-time verification**: a model that would not load back, or would predict
   differently, is refused when saving rather than months later.
 - **Pre-deploy check**: `check_compatibility` reports whether an environment can load a

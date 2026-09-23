@@ -82,7 +82,7 @@ model = mlflow.pyfunc.load_model(
 
 **Problem: the load raises `ModuleNotFoundError` for your package**
 : The class is trusted but not installed. Install the package that defines it in the
-  loading environment, or bundle it with `code_paths` when saving.
+  loading environment. Models cannot bundle code: loading never imports code from the model.
 
 **Problem: a model file lists your type in its `MLmodel` file, yet loading still refuses it**
 : This is intended. The type list stored in the model is informational, and a saved

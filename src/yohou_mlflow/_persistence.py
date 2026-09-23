@@ -15,7 +15,7 @@ import os
 import shutil
 import warnings
 import zipfile
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -37,9 +37,7 @@ from mlflow.utils.environment import (
     _validate_env_arguments,
 )
 from mlflow.utils.model_utils import (
-    _add_code_from_conf_to_system_path,
     _get_flavor_configuration,
-    _validate_and_copy_code_paths,
     _validate_and_prepare_target_save_path,
 )
 from mlflow.utils.requirements_utils import _get_pinned_requirement
@@ -104,7 +102,6 @@ def save_model(
     extra_trusted_types: Iterable[str] | None = None,
     signature: ModelSignature | None = None,
     conda_env: Any = None,
-    code_paths: Sequence[str] | None = None,
     mlflow_model: Model | None = None,
     pip_requirements: Any = None,
     extra_pip_requirements: Any = None,
@@ -132,8 +129,6 @@ def save_model(
         The flavour's four params are always added.
     conda_env : dict, str or None, default=None
         Conda environment, as for MLflow's built-in flavours.
-    code_paths : sequence of str or None, default=None
-        Local code to bundle with the model, as for MLflow's built-in flavours.
     mlflow_model : mlflow.models.Model or None, default=None
         Model configuration to add the flavour to. Used by ``log_model``.
     pip_requirements : iterable of str, str or None, default=None
@@ -155,8 +150,8 @@ def save_model(
         If the forecaster holds types outside the trust policy and
         ``extra_trusted_types``.
     SaveVerificationError
-        If the written model cannot be loaded back, or loads back with different
-        predictions, including forecasters fitted on time-zone-aware data while
+        If the written model cannot be loaded back, fails to predict once reloaded, or
+        loads back with different predictions, including forecasters fitted on time-zone-aware data while
         skops cannot rebuild ``zoneinfo.ZoneInfo``.
 
     See Also
@@ -188,7 +183,6 @@ def save_model(
             supported=supported,
             default_type=default_type,
             conda_env=conda_env,
-            code_paths=code_paths,
             mlflow_model=mlflow_model,
             pip_requirements=pip_requirements,
             extra_pip_requirements=extra_pip_requirements,
@@ -208,7 +202,6 @@ def _write_model(
     supported: frozenset[str],
     default_type: str,
     conda_env: Any,
-    code_paths: Sequence[str] | None,
     mlflow_model: Model | None,
     pip_requirements: Any,
     extra_pip_requirements: Any,
@@ -223,7 +216,6 @@ def _write_model(
         raise UntrustedTypesError(outside, when="save")
     _verify_round_trip(forecaster, data, types, default_type)
 
-    code_dir = _validate_and_copy_code_paths(code_paths, path)
     if mlflow_model is None:
         mlflow_model = Model()
     mlflow_model.signature = signature
@@ -239,14 +231,12 @@ def _write_model(
         forecaster_class=f"{type(forecaster).__module__}.{type(forecaster).__qualname__}",
         forecaster_type=sorted(supported),
         default_prediction_type=default_type,
-        code=code_dir,
     )
     pyfunc.add_to_model(
         mlflow_model,
         loader_module="yohou_mlflow",
         conda_env=_CONDA_ENV_FILE_NAME,
         python_env=_PYTHON_ENV_FILE_NAME,
-        code=code_dir,
         # MLflow only lets `mlflow.pyfunc.load_model(..., model_config=...)` override
         # keys the model was saved with, so the load options are saved here with their
         # safe values. `_load_pyfunc` refuses a file that changed them.
@@ -283,7 +273,14 @@ def _verify_round_trip(original: Any, data: bytes, types: list[str], default_typ
             stacklevel=3,
         )
         return
-    actual = getattr(loaded, method)()
+    try:
+        actual = getattr(loaded, method)()
+    except Exception as exc:
+        msg = (
+            f"The saved forecaster loaded back, but the reloaded model raised {type(exc).__name__} "
+            f"in {method}() ({exc}). Nothing was saved."
+        )
+        raise SaveVerificationError(msg) from exc
     if not actual.equals(expected):
         msg = (
             f"The saved forecaster loaded back, but the reloaded model predicts differently "
@@ -317,7 +314,6 @@ def log_model(
     extra_trusted_types: Iterable[str] | None = None,
     signature: ModelSignature | None = None,
     conda_env: Any = None,
-    code_paths: Sequence[str] | None = None,
     pip_requirements: Any = None,
     extra_pip_requirements: Any = None,
     metadata: dict[str, Any] | None = None,
@@ -340,8 +336,6 @@ def log_model(
     signature : mlflow.models.ModelSignature or None, default=None
         See `save_model`.
     conda_env : dict, str or None, default=None
-        See `save_model`.
-    code_paths : sequence of str or None, default=None
         See `save_model`.
     pip_requirements : iterable of str, str or None, default=None
         See `save_model`.
@@ -375,7 +369,6 @@ def log_model(
         extra_trusted_types=extra_trusted_types,
         signature=signature,
         conda_env=conda_env,
-        code_paths=code_paths,
         pip_requirements=pip_requirements,
         extra_pip_requirements=extra_pip_requirements,
         **kwargs,
@@ -434,7 +427,9 @@ def load_model(
 def _load_local(local: str, *, extra_trusted_types: Iterable[str] | None, strict: bool) -> tuple[Any, dict[str, Any]]:
     conf = _get_flavor_configuration(local, FLAVOR_NAME)
     _check_format_version(conf)
-    _add_code_from_conf_to_system_path(local, conf)
+    # No `code` directory from the model is ever put on the import path: a saved model
+    # could otherwise ship a package named like a trusted one (for example `yohou`) and
+    # have it imported while skops resolves the types below.
     mismatches = compare_versions(conf.get("versions", {}))
     if mismatches:
         if strict:
