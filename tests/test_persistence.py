@@ -2,6 +2,7 @@
 
 import copy
 import re
+import sys
 import warnings
 from pathlib import Path
 
@@ -361,6 +362,36 @@ def test_verification_mismatch(point_case: Case, tmp_path: Path, monkeypatch: py
     with pytest.raises(SaveVerificationError, match="predicts differently"):
         yohou_mlflow.save_model(point_case.forecaster, path)
     assert not path.exists()
+
+
+def test_verification_reloaded_predict_failure(
+    point_case: Case, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A reloaded model that fails to predict is refused with a named cause, and nothing is kept."""
+
+    class _Broken:
+        def predict(self):
+            raise KeyError("missing state")
+
+    monkeypatch.setattr(skops.io, "loads", lambda *args, **kwargs: _Broken())
+    path = tmp_path / "model"
+    with pytest.raises(SaveVerificationError, match="reloaded model raised KeyError"):
+        yohou_mlflow.save_model(point_case.forecaster, path)
+    assert not path.exists()
+
+
+def test_load_never_imports_code_from_the_model(point_case: Case, tmp_path: Path) -> None:
+    """A ``code`` directory named in the model file is never put on the import path."""
+    path = _saved(point_case, tmp_path)
+    package = path / "code" / "planted_by_model"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    edit_flavor(path, code="code")
+    before = list(sys.path)
+    yohou_mlflow.load_model(str(path))
+    assert sys.path == before
+    assert str(path / "code") not in sys.path
+    assert "planted_by_model" not in sys.modules
 
 
 def test_verification_without_predictable_original(

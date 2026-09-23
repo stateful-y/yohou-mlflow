@@ -67,6 +67,7 @@ def installed_versions() -> dict[str, str]:
 
 
 def _major_minor(text: str) -> tuple[int, ...] | str:
+    """Return the (major, minor) release of a version, or the text itself if unparseable."""
     try:
         return Version(text).release[:2]
     except InvalidVersion:

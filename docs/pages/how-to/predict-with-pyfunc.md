@@ -19,6 +19,11 @@ import mlflow.pyfunc
 model = mlflow.pyfunc.load_model("models:/daily-demand/latest")
 ```
 
+Load only models you trust this way: MLflow imports the modules the model file names
+before any check runs. For a model you have not reviewed, run
+[`check_compatibility`](check-before-deploying.md) first, or use
+`yohou_mlflow.load_model`.
+
 If the forecaster contains your own estimator classes, pass them at load time:
 `mlflow.pyfunc.load_model(uri, model_config={"extra_trusted_types": [...]})`.
 

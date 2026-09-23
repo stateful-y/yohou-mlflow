@@ -16,7 +16,7 @@ from yohou.point import PointReductionForecaster
 
 import yohou_mlflow
 from conftest import HORIZON, Case
-from yohou_mlflow import UntrustedTypesError, YohouMlflowError
+from yohou_mlflow import UntrustedTypesError, VersionMismatchError, VersionMismatchWarning, YohouMlflowError
 from yohou_mlflow._pyfunc import default_prediction_type, supported_prediction_types
 
 
@@ -146,6 +146,14 @@ def test_params_only_signature(point_case: Case, tmp_path: Path) -> None:
 
 
 def test_user_signature_without_params_gets_them(point_case: Case, tmp_path: Path) -> None:
+    """A caller's signature with no params gains exactly the flavour params and keeps its outputs."""
+    signature = ModelSignature(inputs=None, outputs=Schema([ColSpec("double", "v")]))
+    model = _pyfunc(point_case, tmp_path, signature=signature)
+    assert [p.name for p in model.metadata.signature.params.params] == list(yohou_mlflow.PARAM_NAMES)
+    assert model.metadata.signature.outputs is not None
+
+
+def test_user_signature_params_are_merged(point_case: Case, tmp_path: Path) -> None:
     """A caller's signature keeps its outputs and params and gains the flavour params."""
     signature = ModelSignature(
         inputs=None,
@@ -255,6 +263,31 @@ def test_model_config_unknown_key(point_case: Case, tmp_path: Path, caplog: pyte
     model = mlflow.pyfunc.load_model(str(path), model_config={"trusted": []})
     assert "trusted" in caplog.text
     assert model.predict({}).equals(point_case.forecaster.predict())
+
+
+def test_model_config_strict(point_case: Case, tmp_path: Path) -> None:
+    """``strict`` in ``model_config`` turns a version mismatch from an error into a warning."""
+    path = tmp_path / "model"
+    yohou_mlflow.save_model(point_case.forecaster, path)
+    mlmodel = yaml.safe_load((path / "MLmodel").read_text())
+    mlmodel["flavors"]["yohou"]["versions"]["yohou"] = "0.0.0"
+    (path / "MLmodel").write_text(yaml.safe_dump(mlmodel))
+    with pytest.raises(VersionMismatchError):
+        mlflow.pyfunc.load_model(str(path))
+    with pytest.warns(VersionMismatchWarning):
+        model = mlflow.pyfunc.load_model(str(path), model_config={"strict": False})
+    assert model.predict({}).equals(point_case.forecaster.predict())
+
+
+def test_saved_load_options_cannot_relax_strictness(point_case: Case, tmp_path: Path) -> None:
+    """A model file that pre-sets ``strict: false`` is refused."""
+    path = tmp_path / "model"
+    yohou_mlflow.save_model(point_case.forecaster, path)
+    mlmodel = yaml.safe_load((path / "MLmodel").read_text())
+    mlmodel["flavors"]["python_function"][mlflow.pyfunc.MODEL_CONFIG]["strict"] = False
+    (path / "MLmodel").write_text(yaml.safe_dump(mlmodel))
+    with pytest.raises(YohouMlflowError, match="cannot choose its own trust or strictness"):
+        mlflow.pyfunc.load_model(str(path))
 
 
 def test_saved_load_options_cannot_extend_trust(local_ridge_case: Case, local_ridge_type: str, tmp_path: Path) -> None:

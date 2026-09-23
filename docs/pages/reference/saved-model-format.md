@@ -13,7 +13,6 @@ checks `load_model` and `check_compatibility` apply to it. Format version `1.0`.
 | `conda.yaml` | Conda environment |
 | `python_env.yaml` | Python version and build dependencies |
 | `constraints.txt` | pip constraints, present only when the requirements carry any |
-| `code/` | Bundled code, present only when `code_paths` was given |
 
 ## `MLmodel`: `flavors.yohou`
 
@@ -26,7 +25,6 @@ checks `load_model` and `check_compatibility` apply to it. Format version `1.0`.
 | `forecaster_class` | string | Fully qualified class of the saved forecaster |
 | `forecaster_type` | list of string | Supported prediction types, from the forecaster's `forecaster_type` tag |
 | `default_prediction_type` | string | `prediction_type` used by the pyfunc flavour when a call names none |
-| `code` | string or null | Directory of bundled code |
 
 Example:
 
@@ -121,6 +119,12 @@ object is constructed from `forecaster.skops`:
 
 `check_compatibility` applies steps 1 to 3 and returns a `CompatibilityReport` instead of
 raising.
+
+Neither function puts any directory from the model on Python's import path, and a `code`
+key in the `MLmodel` file is ignored.
+
+`mlflow.pyfunc.load_model` is outside this guarantee: MLflow imports the `loader_module` and
+any `code` directory named in `flavors.python_function` before calling this package.
 
 ## Save checks
 

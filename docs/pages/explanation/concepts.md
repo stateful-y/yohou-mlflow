@@ -75,6 +75,19 @@ source of code. Anything else, such as an estimator class from your own project,
 be named by the caller, when saving and again on every load. The type list recorded in
 `MLmodel` is only there to be read.
 
+The same reasoning rules out bundled code. MLflow flavours usually let a model carry a
+`code/` directory that loading puts on Python's import path. For this package that would
+be code from the file by definition, and worse: a model could ship a package named like a
+trusted one, such as `yohou`, and have it imported while the forecaster's types are
+resolved. So a yohou model carries no bundled code, and `load_model` never puts anything
+from the model directory on the import path.
+
+The guarantee belongs to `yohou_mlflow.load_model` and `check_compatibility`. MLflow's
+generic `mlflow.pyfunc.load_model` runs first and on MLflow's terms: it imports the loader
+module and any bundled code that the `MLmodel` file names, before this package is called.
+A model you have not reviewed should therefore go through `check_compatibility` or
+`yohou_mlflow.load_model`, never straight to the generic interface.
+
 One boundary is worth knowing. A polars frame is stored as polars' own binary format and
 rebuilt by polars' native reader. That format cannot hold Python objects, so no Python
 code runs, but a crafted file does reach a native parser.
