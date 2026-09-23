@@ -1,0 +1,21 @@
+# Examples
+
+Interactive notebooks you can read, run, or edit in the browser. **Tutorials**
+walk through a topic step-by-step, while **How-to Guides** solve a specific task.
+
+<!-- GALLERY -->
+
+## Running Examples Locally
+
+```bash
+# Interactive editing
+just example
+
+# Run as script
+python examples/hello.py
+```
+
+## Next Steps
+
+- Browse the [API Reference](../reference/api.md) for detailed documentation
+- Check the [Concepts](../explanation/concepts.md) to understand core ideas

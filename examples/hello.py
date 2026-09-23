@@ -1,0 +1,157 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "yohou_mlflow",
+#     "numpy",
+#     "plotly",
+# ]
+# ///
+import marimo
+
+__generated_with = "0.9.0"
+__gallery__ = {
+    "title": "Hello Yohou-MLflow",
+    "description": "Interactive scatter plot demonstrating Yohou-MLflow with marimo notebooks.",
+    "category": "tutorial",
+    # Renders this notebook as a card on the named docs page, which must carry
+    # the <!-- COMPANION_NOTEBOOKS --> placeholder.
+    "companion": "pages/tutorials/getting-started.md",
+    # You can also add:
+    #   "api_references": ["MyClass", "my_function"]
+    # to say which symbols this notebook demonstrates.  Without it, the symbols
+    # are inferred from the notebook's imports -- which also picks up
+    # scaffolding, so declaring is more precise once a gallery grows.
+}
+app = marimo.App(width="medium")
+
+
+@app.cell(hide_code=True)
+def _():
+    import marimo as mo
+    return (mo,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(
+        """
+        # Welcome to Yohou-MLflow
+
+        This is an example marimo notebook demonstrating interactive data visualization.
+
+        **What is marimo?**
+
+        marimo is a reactive Python notebook that's stored as pure Python,
+        executable as a script, and deployable as an app.
+
+        Try changing the slider below to see reactive execution in action!
+        """
+    )
+    return
+
+
+@app.cell
+def _(mo):
+    from yohou_mlflow.hello import Greeter, hello
+
+    greeter = Greeter("Welcome to")
+    message = greeter.greet("Yohou-MLflow")
+
+    mo.md(
+        f"""
+        ## Package Demo
+
+        Using the `hello` module from **Yohou-MLflow**:
+
+        - `hello()` → *{hello()}*
+        - `Greeter("Welcome to").greet("Yohou-MLflow")` → *{message}*
+        """
+    )
+    return Greeter, greeter, hello, message
+
+
+@app.cell
+def _(mo):
+    # Create an interactive slider
+    num_points = mo.ui.slider(
+        start=10,
+        stop=200,
+        value=50,
+        step=10,
+        label="Number of points:",
+    )
+    num_points
+    return (num_points,)
+
+
+@app.cell
+def _(mo, num_points):
+    mo.md(f"Generating a scatter plot with **{num_points.value}** random points...")
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    import numpy as np
+    import plotly.express as px
+    return np, px
+
+
+@app.cell
+def _(np, num_points, px):
+    # Set random seed for reproducibility
+    np.random.seed(42)
+
+    # Generate random data
+    n = num_points.value
+    x = np.random.randn(n)
+    y = 2 * x + np.random.randn(n) * 0.5
+    categories = np.random.choice(['A', 'B', 'C'], size=n)
+
+    # Create interactive plotly chart
+    fig = px.scatter(
+        x=x,
+        y=y,
+        color=categories,
+        title=f'Interactive Scatter Plot ({n} points)',
+        labels={'x': 'X values', 'y': 'Y values', 'color': 'Category'},
+        template='plotly_white',
+    )
+
+    fig.update_traces(marker=dict(size=8, opacity=0.7))
+    fig
+    return categories, fig, n, x, y
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(
+        """
+        ## Key Takeaways
+
+        - **Reactive execution**: marimo cells automatically re-run when their dependencies change
+        - **Interactive widgets**: sliders, dropdowns, and other UI elements update plots in real time
+        - **Plotly integration**: rich, interactive charts work seamlessly inside marimo notebooks
+        - **Pure Python**: every notebook is a valid `.py` file — version control, CI, and scripting just work
+
+        ## Next Steps
+
+        | Topic | Resource |
+        |-------|----------|
+        | Concepts | [Concepts](../pages/explanation/concepts/) |
+        | API Reference | [API Reference](../pages/api/) |
+        | Contributing | [Contributing Guide](../pages/how-to/contribute/) |
+        | marimo docs | [marimo.io](https://marimo.io) |
+
+        **Try these commands:**
+
+        - Run this notebook interactively: `just example`
+        - Execute as a script: `python examples/hello.py`
+        - Deploy as an app: `marimo run examples/hello.py`
+        """
+    )
+    return
+
+
+if __name__ == "__main__":
+    app.run()

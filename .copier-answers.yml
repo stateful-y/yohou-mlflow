@@ -1,0 +1,21 @@
+# This file is used by Copier to track the template version
+# and enable template updates in generated projects
+
+_commit: d1a6ab905ab9ff851af3db8faca1ec244275a09f
+_src_path: gh:stateful-y/python-package-copier
+author_email: gtauzin@stateful-y.io
+author_name: Guillaume Tauzin
+code_owner: '@gtauzin'
+description: An MLflow integration for saving and serving Yohou forecasters
+github_username: stateful-y
+include_actions: True
+include_codecov: True
+include_examples: True
+license: Apache-2.0
+max_python_version: '3.14'
+min_python_version: '3.11'
+package_name: yohou_mlflow
+project_name: Yohou-MLflow
+project_slug: yohou-mlflow
+renovate_preset: 'stateful-y/renovate-config'
+repo_visibility: public

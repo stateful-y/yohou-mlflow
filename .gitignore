@@ -1,0 +1,168 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Throwaway build output. Every tool that writes one is configured to write it
+# here instead of at the repo root: coverage data/HTML/XML and the JUnit report
+# (pyproject.toml), the pytest and ruff caches (pyproject.toml), the nox
+# environments (noxfile.py), the Hypothesis database (tests/conftest.py) and the
+# built site (mkdocs.yml). One entry replaces the nine that used to be listed.
+.artifacts/
+
+# Testing. `.tox/` is not something this template configures, and the bare
+# patterns below catch output from a tool run outside the project's own config.
+.tox/
+*.cover
+*.log
+
+# Type checking
+.ty_cache/
+.pytype/
+.pyre/
+
+# Documentation
+docs/_build/
+.mkdocs_cache/
+
+# Distribution
+*.whl
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# Marimo
+examples/__marimo__/
+
+# Environment
+.env
+.env.local
+
+# Hypothesis writes a `.hypothesis/` storage directory for its own constants and
+# unicode caches. No setting relocates it -- `database=` moves only the example
+# database, which the generated conftest.py points under `.artifacts/`.
+#
+# Recent Hypothesis drops a self-ignoring `.gitignore` inside it, and this entry was
+# removed on the strength of that. It is version-dependent, and the project floors at
+# `hypothesis>=6.100`. Measured across the fleet: 6.151.9 does NOT write the file;
+# 6.156.9, 6.158.0, 6.161.2 and 6.165.2 all do -- so the cutoff sits between 6.151.9
+# and 6.156.9, and every repo measured happened to resolve above it. One did not, and
+# got ~26 untracked files at its root: the exact mess the `.artifacts/` layout exists to
+# prevent, reintroduced by trusting a library's internal behaviour across a range it
+# does not promise. Nothing pins the resolution, so the entry stays.
+.hypothesis/
+
+# Markdown linter cache. rumdl has no cache-path option, so unlike the caches
+# above this one cannot be moved under `.artifacts/`.
+.rumdl_cache/
+
+# OpenSpec (local working artifacts, not tracked)
+openspec/
+
+# build
+src/yohou_mlflow/_version.py
+
+# Documentation examples
+docs/examples/*/
+
+# Auto-generated API submodule pages (created by docs_build/build.py)
+docs/pages/api/
+
+# Worktrees
+.worktrees/
+
+# AI assistant instructions are NOT ignored. CLAUDE.md is project content: it is
+# where a project records what a newcomer cannot derive from the code, and ignoring
+# it meant no generated project could keep that anywhere the repo could see. The
+# template seeds it once (see _skip_if_exists in copier.yml) and never overwrites it.
+
+# GitHub Copilot
+COPILOT.md
+COPILOT_INSTRUCTIONS.md
+.copilot.md
+copilot-instructions.md
+copilot-config.md
+copilot-prompt.md
+
+# ChatGPT / OpenAI
+CHATGPT.md
+GPT.md
+OPENAI.md
+chatgpt-instructions.md
+gpt-instructions.md
+openai-instructions.md
+
+# Generic AI/LLM instructions
+AI.md
+AI_INSTRUCTIONS.md
+LLM.md
+LLM_INSTRUCTIONS.md
+.ai-instructions.md
+.llm-instructions.md
+ai-prompt.md
+llm-prompt.md
+assistant-instructions.md
+
+# Custom instructions directories
+.ai/
+.llm/
+.copilot/
+ai-instructions/
+llm-instructions/
+
+# Claude Code: keep personal config (settings.local.json, etc.) private, but
+# track the skills shipped by the template. Must be ".claude/*" and not
+# ".claude/" -- git does not descend into an excluded directory, so a negation
+# under ".claude/" would never be reached.
+.claude/*
+!.claude/skills/
+
+# openspec installs its own skills. They are tool state that openspec rewrites,
+# not project content, so they are never tracked -- even though the rule above
+# tracks .claude/skills.
+.claude/skills/openspec-*/
+
+# The Copilot-side skills mirror .claude/skills byte for byte. Tracking both
+# doubles every skill edit and its review. .claude/skills is the source of
+# truth; this copy is generated alongside it and stays out of git.
+.github/skills/
+
+# Project-specific AI context (that you want to keep private)
+.cursorrules
+.cursor/
+.aider*
+.continue/

@@ -1,0 +1,411 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+# Least-privilege default: read-only token. No job here writes.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast tests run on every push and PR across all OS and Python versions
+  test-fast:
+    name: Fast tests (Python ${{ matrix.python-version }} on ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Draft PRs: Ubuntu only, min+max Python versions
+        # Ready PRs: All OS, min+max Python versions
+        os: ${{ github.event.pull_request.draft && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest", "windows-latest", "macos-latest"]') }}
+        python-version: ["3.11", "3.14"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Add .local/bin to Windows PATH
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: echo "$USERPROFILE/.local/bin" >> $GITHUB_PATH
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Run fast tests (excluding slow/integration tests)
+        run: nox -s test_fast --python ${{ matrix.python-version }}
+
+  # Compatibility test against oldest supported dependency versions
+  # Uncomment pins when compat pin files are added (e.g., "oldest", "legacy")
+  test-compat:
+    if: false  # disabled until pins are defined
+    name: Compat tests (${{ matrix.pins }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pins: ["placeholder"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Run compat tests
+        run: nox -s test_compat -- ${{ matrix.pins }}
+
+  # Full test suite runs on Ubuntu when PR is not draft or on main branch
+  test-full:
+    name: Full test suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    if: |
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.draft == false)
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    # Codecov upload authenticates via GitHub OIDC (tokenless) -- no stored CODECOV_TOKEN.
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Run tests with coverage
+        if: matrix.python-version == '3.11'
+        run: nox -s test_coverage --python ${{ matrix.python-version }}
+
+      - name: Run tests
+        if: matrix.python-version != '3.11'
+        run: nox -s test --python ${{ matrix.python-version }}
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() && matrix.python-version == '3.11' }}
+        uses: codecov/test-results-action@v1
+        with:
+          use_oidc: true
+          file: '${{ github.workspace }}/.artifacts/junit.xml'
+
+      - name: Upload coverage report to Codecov
+        uses: codecov/codecov-action@v7
+        if: ${{ matrix.python-version == '3.11' }}
+        with:
+          use_oidc: true
+          files: '${{ github.workspace }}/.artifacts/coverage.xml'
+          env_vars: OS,PYTHON
+          fail_ci_if_error: true
+          # Without this the uploader falls back to searching the workspace when
+          # `files` names nothing, and reports success on whatever it finds. That is
+          # not hypothetical: this step pointed at a `coverage.<version>.xml` that no
+          # config had written since the report paths moved into `addopts`, and it
+          # stayed green for releases because the search kept finding `coverage.xml`.
+          # `fail_ci_if_error` above only means something with the fallback off.
+          disable_search: true
+
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Run hooks with nox
+        run: |
+          uvx nox -s fix
+
+
+  test_docstrings:
+    name: Docstring examples
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Run docstring tests
+        run: nox -s test_docstrings
+
+
+  check_docs:
+    name: Docs build (strict)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      # docs_build/_markers.py warns when a marker resolves to nothing. Nothing ran with
+      # warnings fatal, so those warnings went to a log nobody reads and pages
+      # kept silently shipping blank space where a card grid or an index should
+      # be. This is the job that makes them count.
+      - name: Build docs with warnings fatal
+        run: nox -s check_docs
+
+      # A green --strict build is not proof the pages have content: an unresolved
+      # marker ships as an invisible HTML comment, and a docs_build extension that
+      # failed to load leaves every marker blank while the build stays green. These
+      # assertions are the content gate --strict cannot be.
+      - name: Assert the build shipped content, not blank markers
+        env:
+          # Must equal `site_dir` in mkdocs.yml, which is what actually decides
+          # where the build writes. Declared once here so the assertions below read
+          # it instead of each spelling the path out again;
+          # `tests/test_artifact_paths.py` asserts the two agree.
+          SITE_DIR: .artifacts/site
+        run: |
+          set -euo pipefail
+          if grep -rlE '<!-- (API_TABLE|SUBPAGES|GALLERY|EXAMPLES_FOR|COMPANION_NOTEBOOKS)[^>]*-->' "$SITE_DIR" --include='*.html'; then
+            echo "::error::unresolved marker comment(s) in the built site -- a docs_build extension did not run"; exit 1
+          fi
+          # Assert the template's own build tooling did not leak. It lives outside
+          # docs_dir (all of it in docs_build/), so this guards the relocation:
+          # a botched theme merge would republish these. Deliberately NOT a blanket
+          # `*.py` check -- the successor engine ignores exclude_docs, so a project's
+          # OWN docs/*.py script (e.g. a dataset precache) now publishes as a static
+          # asset, and that is the project's file, not leaked tooling.
+          if find "$SITE_DIR" \( -name '*.jinja' -o -name 'api-submodule.html' -o -path '*/material/*' -o -path '*/overrides/*' \) -print | grep -q .; then
+            echo "::error::build tooling (theme templates / API scaffold) leaked into the published site"; exit 1
+          fi
+          pages="$(find "$SITE_DIR/pages/api/generated" -name index.html 2>/dev/null | wc -l)"
+          if [ "$pages" -eq 0 ]; then
+            echo "::error::no generated API pages -- the build.py prebuild step did not run"; exit 1
+          fi
+          anchors="$(grep -rohE 'id="[^"]+"' "$SITE_DIR" --include='*.html' | wc -l)"
+          if [ "$anchors" -lt 100 ]; then
+            echo "::error::only $anchors anchors in the built site -- content collapsed"; exit 1
+          fi
+          echo "content OK: $pages generated API pages, $anchors anchors, no leaked markers or tooling"
+
+  # Non-blocking comparison build under Material for MkDocs during the transition
+  # to Zensical (the primary engine, gated by check_docs above). Material reaches
+  # a hard EOL on 2026-11-05; this job exists only to surface engine drift while
+  # both build the same mkdocs.yml, and is expected to be removed once Zensical
+  # has proven itself across the fleet. It never blocks the PR (continue-on-error).
+  #
+  # Note: this whole workflows/ directory is generated only when include_actions
+  # is true, so a project built without CI has no Zensical safety net here at all
+  # and relies on a local build instead.
+  compare_docs_mkdocs:
+    name: Docs build (MkDocs comparison, non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Build docs under MkDocs (comparison only)
+        env:
+          MKDOCS_SKIP_NOTEBOOKS: "1"
+        run: |
+          uv run python docs_build/build.py prebuild
+          uv run --group docs mkdocs build --clean --strict
+
+
+  examples:
+    name: Run example notebooks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          lfs: true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          # renovate: datasource=github-releases depName=astral-sh/uv
+          version: "0.12.3"
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      - name: Install nox
+        # renovate: datasource=pypi depName=nox
+        run: uv tool install nox==2026.7.11
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Run example notebooks
+        run: nox -s test_examples
+
+
+  # Secret scanning. Runs the gitleaks binary directly (not gitleaks-action, which
+  # requires a paid license for private org repos) so it works identically on public
+  # and private repos. This is the CI backstop to the pre-commit gitleaks hook: it
+  # cannot be bypassed with --no-verify, and it is a dependency of the ci-passed
+  # roll-up below, so a detected secret fails the single required merge check.
+  secret-scan:
+    name: Secret scanning (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          # renovate: datasource=github-releases depName=gitleaks/gitleaks
+          GITLEAKS_VERSION=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar -xz -C /usr/local/bin gitleaks
+
+      - name: Scan for secrets
+        run: gitleaks detect --source . --redact --verbose
+
+  # Single required status check. The branch ruleset requires this one job, not the
+  # individual jobs above: test-fast is a matrix (its check-run names vary by OS/Python and
+  # differ between draft and ready PRs) and test-full is skipped on draft PRs, so neither
+  # can be named directly in a ruleset. This job depends on every blocking job and passes
+  # only when they all succeeded or were legitimately skipped, giving the ruleset one stable
+  # name that survives matrix and conditional changes. Validate PR Title and Validate Commit
+  # Message live in their own workflows and are required alongside this check.
+  #
+  # `test-compat` is listed even though it ships disabled (`if: false`): a skipped dependency
+  # does not fail an `if: always()` roll-up, so this is a harmless no-op until a project
+  # enables compat pins, at which point that job is gated automatically without touching this.
+  ci-passed:
+    name: CI passed
+    if: always()
+    needs:
+      - test-fast
+      - test-compat
+      - test-full
+      - lint
+      - test_docstrings
+      - check_docs
+      - secret-scan
+      - examples
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any required job did not pass
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: |
+          echo "::error::a required CI job failed or was cancelled"
+          exit 1
+      - name: All required jobs passed
+        run: echo "All required CI jobs passed or were legitimately skipped."
