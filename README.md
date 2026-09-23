@@ -10,33 +10,42 @@
 [![Python Version](https://img.shields.io/pypi/pyversions/yohou_mlflow)](https://pypi.org/project/yohou_mlflow/)
 [![License](https://img.shields.io/github/license/stateful-y/yohou-mlflow)](https://github.com/stateful-y/yohou-mlflow/blob/main/LICENSE)
 [![PyPI Version](https://img.shields.io/pypi/v/yohou_mlflow)](https://pypi.org/project/yohou_mlflow/)
-[![Conda Version](https://img.shields.io/conda/vn/conda-forge/yohou_mlflow)](https://anaconda.org/conda-forge/yohou_mlflow)
 [![codecov](https://codecov.io/gh/stateful-y/yohou-mlflow/branch/main/graph/badge.svg)](https://codecov.io/gh/stateful-y/yohou-mlflow)
 
 ## What is Yohou-MLflow?
 
-An MLflow integration for saving and serving Yohou forecasters
+Yohou-MLflow is an MLflow flavour for [yohou](https://github.com/stateful-y/yohou)
+forecasters. It saves a fitted forecaster, including everything it has observed since
+fitting, as an MLflow model you can log, register and load back, so a scheduled job can
+load the latest version, observe new data, forecast, and register the update for the
+next run.
 
-[Add 1-2 paragraphs explaining:
-- The main problem or need this addresses
-- How it works at a high level
-- Key technologies or dependencies it integrates with
-- Version compatibility information if relevant]
+Forecasters are stored with [skops](https://skops.readthedocs.io/) instead of pickle, so
+loading never runs code chosen by the file. Every save is loaded back and compared with
+the original before it is kept.
 
-<!-- Add a screenshot showing your project in action -->
-![Yohou-MLflow Screenshot](https://raw.githubusercontent.com/stateful-y/yohou-mlflow/main/docs/assets/screenshot_dark.png)
+**Loading is strict about versions.** A model loads only under the yohou version it was
+saved with, and under the same major and minor versions of scikit-learn and polars.
+Upgrading yohou therefore means refitting saved forecasters, or loading them with
+`strict=False`. This answers part of
+[yohou#214](https://github.com/stateful-y/yohou/issues/214); loading under newer yohou
+versions is planned as a yohou change.
 
-[Optional: Add version compatibility note]
-<!-- Example: Currently, Yohou-MLflow supports Python 3.11+, and [dependency] versions X.Y.z -->
+Yohou-MLflow supports Python 3.11 to 3.14, MLflow 3, and yohou 0.1.
 
 ## What are the features of Yohou-MLflow?
 
-- **[Feature 1 Name]**: [1-2 sentence description of this capability and why it matters. Focus on the value delivered.]
-- **[Feature 2 Name]**: [1-2 sentence description emphasizing what users can accomplish with this feature.]
-- **[Feature 3 Name]**: [1-2 sentence description of the capability and its benefits.]
-- **[Feature 4 Name]**: [1-2 sentence description showing integration or compatibility aspects.]
-- **[Feature 5 Name]**: [1-2 sentence description of advanced functionality.]
-- **(Experimental) [Feature 6 Name]**: [1-2 sentence description noting this is experimental or in development.]
+- **MLflow flavour**: `save_model`, `log_model` and `load_model` for point, interval,
+  class-probability, panel and composite forecasters, with model registry support.
+- **No code execution on load**: a fixed trust policy decides which types a saved
+  model may contain; the model file cannot extend it.
+- **Save-time verification**: a model that would not load back, or would predict
+  differently, is refused when saving rather than months later.
+- **Pre-deploy check**: `check_compatibility` reports whether an environment can load a
+  registered model, without constructing anything from it.
+- **Generic predict interface**: `mlflow.pyfunc.load_model(...).predict({"y": new_rows})`
+  observes new rows on a copy and forecasts, with `prediction_type` selecting point,
+  interval or class-probability forecasts.
 
 ## How to install Yohou-MLflow?
 
@@ -49,77 +58,49 @@ pip install yohou_mlflow
 or using `uv`:
 
 ```bash
-uv pip install yohou_mlflow
+uv add yohou_mlflow
 ```
 
-or using `conda`:
-
-```bash
-conda install -c conda-forge yohou_mlflow
-```
-
-or using `mamba`:
-
-```bash
-mamba install -c conda-forge yohou_mlflow
-```
-
-or alternatively, add `yohou_mlflow` to your `requirements.txt` or `pyproject.toml` file.
+The package depends on `mlflow-skinny`. To run a local SQLite tracking server and model
+registry, as in the tutorial, also install `mlflow`.
 
 ## How to get started with Yohou-MLflow?
 
-### 1. [Initialize/Setup Step]
+Register a fitted forecaster:
 
-[Brief description of what this step accomplishes]
+```python
+import mlflow
+import yohou_mlflow
 
-Use the following command to [describe action]:
-
-```bash
-[command to run]
+with mlflow.start_run():
+    yohou_mlflow.log_model(forecaster, name="forecaster", registered_model_name="daily-demand")
 ```
 
-### 2. [Configure/Customize Step]
+In a later run, load it, observe new data, forecast, and register the update:
 
-[Brief description of what configuration does]
+```python
+forecaster = yohou_mlflow.load_model("models:/daily-demand/latest")
+forecaster.observe(new_rows)
+forecast = forecaster.predict()
 
-Define your [settings/options] in the `[config file]` located in [location]. This file allows you to [describe what user can configure].
-
-```yaml
-# [config file path]
-[setting_section]:
-  [setting_1]: [value]  # Comment explaining setting
-  [setting_2]: [value]  # Comment explaining setting
-
-[another_section]:
-  [option_1]:
-    [sub_option]: [value]
-
-  [option_2]:
-    [sub_option]: [value]
+with mlflow.start_run():
+    yohou_mlflow.log_model(forecaster, name="forecaster", registered_model_name="daily-demand")
 ```
 
-### 3. [Execute/Run Step]
+Before upgrading the environment that loads it, check that it still can:
 
-[Brief description of how to run or execute]
-
-[Action description] using the following command:
-
-```bash
-[command to run]
+```python
+print(yohou_mlflow.check_compatibility("models:/daily-demand/latest"))
 ```
-
-[Additional context about what happens when this runs, e.g., "The [interface/UI] will be available at http://127.0.0.1:XXXX"]
 
 ## How do I use Yohou-MLflow?
 
 Full documentation is available at [https://yohou-mlflow.readthedocs.io/](https://yohou-mlflow.readthedocs.io/).
 
-
 Interactive examples are available in the `examples/` directory:
 
 - **Online**: [https://yohou-mlflow.readthedocs.io/en/latest/pages/examples/](https://yohou-mlflow.readthedocs.io/en/latest/pages/examples/)
-- **Locally**: Run `marimo edit examples/hello.py` to open an interactive notebook
-
+- **Locally**: Run `marimo edit examples/registry_loop.py` to open an interactive notebook
 
 ## Can I contribute?
 
@@ -132,8 +113,6 @@ We welcome contributions, feedback, and questions:
 If you are interested in becoming a maintainer or taking a more active role, please reach out to Guillaume Tauzin on [GitHub Discussions](https://github.com/stateful-y/yohou-mlflow/discussions).
 
 ## Where can I learn more?
-
-[Customize this section based on your project's community resources. For example:]
 
 - Full documentation: [https://yohou-mlflow.readthedocs.io/](https://yohou-mlflow.readthedocs.io/)
 - GitHub Discussions: [https://github.com/stateful-y/yohou-mlflow/discussions](https://github.com/stateful-y/yohou-mlflow/discussions)

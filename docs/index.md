@@ -11,7 +11,7 @@ An MLflow integration for saving and serving Yohou forecasters
 
     ---
 
-    Install Yohou-MLflow and run your first example.
+    Register a forecaster, load it in a later run, observe new data, and forecast.
 
     [Getting Started](pages/tutorials/getting-started.md)
 
@@ -19,7 +19,7 @@ An MLflow integration for saving and serving Yohou forecasters
 
     ---
 
-    Task-focused guides for configuring Yohou-MLflow and contributing to it.
+    Check a model before deploying, forecast through pyfunc, trust your own estimators, keep the registry small.
 
     [How-to Guides](pages/how-to/index.md)
 
@@ -27,7 +27,7 @@ An MLflow integration for saving and serving Yohou forecasters
 
     ---
 
-    Understand the design and core ideas behind Yohou-MLflow.
+    Why loading is strict about versions, and why a saved model cannot choose what to trust.
 
     [Concepts](pages/explanation/concepts.md)
 
@@ -47,7 +47,7 @@ An MLflow integration for saving and serving Yohou forecasters
 
 ### [Getting Started](pages/tutorials/getting-started.md)
 
-Install and run your first example.
+Run the scheduled forecasting loop against a model registry.
 
 
 ### [Examples](pages/examples/index.md)
@@ -55,17 +55,17 @@ Install and run your first example.
 Interactive notebooks demonstrating Yohou-MLflow in practice.
 
 
-### [Configuration](pages/how-to/configure.md)
+### [How-to Guides](pages/how-to/index.md)
 
-Set up and customize Yohou-MLflow for your project.
+Check a model before deploying, forecast through pyfunc, migrate pickled forecasters.
 
 ### [API Reference](pages/reference/api.md)
 
 Complete API reference - classes, functions, and options.
 
-### [Concepts](pages/explanation/concepts.md)
+### [About Saving Forecasters](pages/explanation/concepts.md)
 
-Design, architecture, and core ideas.
+Why saves are verified, loads are strict about versions, and the file cannot extend trust.
 
 ## License
 
