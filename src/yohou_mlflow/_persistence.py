@@ -207,6 +207,7 @@ def _write_model(
     extra_pip_requirements: Any,
     metadata: dict[str, Any] | None,
 ) -> None:
+    """Write the skops file, check it, then write MLmodel and the environment files."""
     file = os.path.join(path, _FORECASTER_FILE)
     skops.io.dump(forecaster, file, compression=zipfile.ZIP_DEFLATED)
     data = Path(file).read_bytes()
@@ -290,6 +291,7 @@ def _verify_round_trip(original: Any, data: bytes, types: list[str], default_typ
 
 
 def _write_environment(path: str, conda_env: Any, pip_requirements: Any, extra_pip_requirements: Any) -> None:
+    """Write conda.yaml, requirements.txt, constraints.txt if needed, and python_env.yaml."""
     if conda_env is None:
         default_requirements = get_default_pip_requirements() if pip_requirements is None else None
         conda_env, pip_reqs, constraints = _process_pip_requirements(
@@ -425,6 +427,7 @@ def load_model(
 
 
 def _load_local(local: str, *, extra_trusted_types: Iterable[str] | None, strict: bool) -> tuple[Any, dict[str, Any]]:
+    """Check format, versions and trust for a local model directory, then load it."""
     conf = _get_flavor_configuration(local, FLAVOR_NAME)
     _check_format_version(conf)
     # No `code` directory from the model is ever put on the import path: a saved model
@@ -444,6 +447,7 @@ def _load_local(local: str, *, extra_trusted_types: Iterable[str] | None, strict
 
 
 def _check_format_version(conf: dict[str, Any]) -> str:
+    """Return the recorded format version, or raise FormatVersionError if unsupported."""
     text = str(conf.get("format_version", ""))
     try:
         major = int(text.partition(".")[0])
@@ -460,6 +464,7 @@ def _check_format_version(conf: dict[str, Any]) -> str:
 
 
 def _component_path(local: str, conf: dict[str, Any], component: str) -> str:
+    """Return the path of a component file, refusing names that leave the model directory."""
     name = str(conf.get("components", {}).get(component, ""))
     # The name comes from the model file, so it must not reach outside the model.
     if not name or os.path.basename(name) != name or name in {".", ".."}:
