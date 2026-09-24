@@ -126,12 +126,24 @@ def test_omitted_list_params_use_yohou_defaults(interval_case: Case, tmp_path: P
     assert result.equals(interval_case.forecaster.predict_interval(coverage_rates=None, groups=None))
 
 
-def test_groups_restrict_the_panel(panel_case: Case, tmp_path: Path) -> None:
-    """``groups`` keeps only the named panel groups."""
+def test_groups_restrict_the_panel(panel_case: Case, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``groups`` reaches both ``observe`` and the predict method, and keeps only those groups."""
     model = _pyfunc(panel_case, tmp_path)
+    observed_groups = []
+    real_observe = PointReductionForecaster.observe
+
+    def observe(self, *args, **kwargs):
+        observed_groups.append(kwargs.get("groups"))
+        return real_observe(self, *args, **kwargs)
+
+    monkeypatch.setattr(PointReductionForecaster, "observe", observe)
     result = model.predict({"y": panel_case.next_rows}, params={"groups": ["a"]})
+    assert observed_groups == [["a"]]
     assert [c for c in result.columns if "__" in c] == ["a__v"]
-    assert result.equals(_observed_copy(panel_case).predict(groups=["a"]))
+    monkeypatch.undo()
+    expected = copy.deepcopy(panel_case.forecaster)
+    expected.observe(panel_case.next_rows, groups=["a"])
+    assert result.equals(expected.predict(groups=["a"]))
 
 
 # -- Signature ----------------------------------------------------------------------

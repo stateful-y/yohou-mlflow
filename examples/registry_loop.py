@@ -50,6 +50,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _():
     import datetime as dt
+    import shutil
     import tempfile
     from pathlib import Path
 
@@ -61,7 +62,7 @@ def _():
 
     import yohou_mlflow
 
-    return Path, PointReductionForecaster, Ridge, dt, mlflow, np, pl, tempfile, yohou_mlflow
+    return Path, PointReductionForecaster, Ridge, dt, mlflow, np, pl, shutil, tempfile, yohou_mlflow
 
 
 @app.cell(hide_code=True)
@@ -117,8 +118,8 @@ def _(mo):
 
         ## 3. Register it
 
-        We keep the registry in a temporary directory, so this notebook leaves
-        nothing behind, and log the forecaster as version 1 of `daily-demand`.
+        We keep the registry in a temporary directory, which the last cell deletes,
+        and log the forecaster as version 1 of `daily-demand`.
         """
     )
     return
@@ -134,7 +135,7 @@ def _(Path, forecaster, mlflow, tempfile, yohou_mlflow):
     with mlflow.start_run():
         first = yohou_mlflow.log_model(forecaster, name="forecaster", registered_model_name="daily-demand")
     first.registered_model_version
-    return
+    return (workdir,)
 
 
 @app.cell(hide_code=True)
@@ -155,7 +156,9 @@ def _(mo):
 @app.cell
 def _(forecaster, yohou_mlflow):
     loaded = yohou_mlflow.load_model("models:/daily-demand/1")
-    loaded.predict().equals(forecaster.predict())
+    same_as_registered = loaded.predict().equals(forecaster.predict())
+    assert same_as_registered
+    same_as_registered
     return (loaded,)
 
 
@@ -202,7 +205,29 @@ def _(forecast, loaded, mlflow, yohou_mlflow):
     with mlflow.start_run():
         yohou_mlflow.log_model(loaded, name="forecaster", registered_model_name="daily-demand")
     latest = yohou_mlflow.load_model("models:/daily-demand/2")
-    {"observed up to": latest.observed_time_, "same forecast": latest.predict().equals(forecast)}
+    continues = latest.predict().equals(forecast)
+    assert continues
+    {"observed up to": latest.observed_time_, "same forecast": continues}
+    return (latest,)
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(
+        r"""
+        ## 7. Clean up
+
+        We delete the temporary directory that held the registry.
+        """
+    )
+    return
+
+
+@app.cell
+def _(latest, shutil, workdir):
+    assert latest is not None  # runs only after version 2 was registered and loaded
+    shutil.rmtree(workdir, ignore_errors=True)
+    assert not workdir.exists()
     return
 
 

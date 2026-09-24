@@ -30,9 +30,10 @@ dependencies = [
     # Parses the recorded versions for the major.minor comparison. Already required by
     # mlflow-skinny and skops; declared because this package imports it directly.
     "packaging>=17.0",
-    # 0.9 and 0.10 break on NumPy 2 and current scikit-learn; 0.11 cannot rebuild a
-    # plain `datetime`. Checked with a lowest-direct install.
-    "skops>=0.12.0",
+    # 0.16.0 is the first release that rebuilds the zoneinfo.ZoneInfo in time-zone-aware
+    # datetimes (skops-dev/skops#546). Older releases saved them but could not load them,
+    # which refused every forecaster fitted on time-zone-aware data.
+    "skops>=0.16.0",
     "yohou>=0.1.0a13,<0.2.0",
 ]
 
