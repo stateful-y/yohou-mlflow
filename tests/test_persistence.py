@@ -113,7 +113,6 @@ def test_policy_trusts_yohou_polars_and_datetime() -> None:
     assert is_trusted("polars.datatypes.classes.Float64")
     assert is_trusted("polars.dataframe.frame.DataFrame")
     assert is_trusted("zoneinfo.ZoneInfo")
-    assert is_trusted("datetime.timezone")
     assert is_trusted("sklearn.ensemble._hist_gradient_boosting.predictor.TreePredictor")
     assert not is_trusted("yohou_mlflow.anything")
     assert not is_trusted("builtins.eval")

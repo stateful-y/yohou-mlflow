@@ -32,7 +32,6 @@ TRUSTED_TYPES: frozenset[str] = frozenset({
     "datetime.date",
     "datetime.datetime",
     "datetime.timedelta",
-    "datetime.timezone",
     "zoneinfo.ZoneInfo",
 })
 
