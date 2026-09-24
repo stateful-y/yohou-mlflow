@@ -1,7 +1,8 @@
 # Saved Model Format
 
 Description of a model directory written by `save_model` or `log_model`, and of the
-checks `load_model` and `check_compatibility` apply to it. Format version `1.0`.
+checks `load_model` and `check_compatibility` apply to it. Format version `1.0`
+(`yohou_mlflow.FORMAT_VERSION`).
 
 ## Directory layout
 
@@ -31,7 +32,6 @@ Example:
 ```yaml
 flavors:
   yohou:
-    code: null
     components:
       forecaster: forecaster.skops
     default_prediction_type: point
@@ -62,6 +62,7 @@ flavors:
 | `loader_module` | `yohou_mlflow` |
 | `config` | `{extra_trusted_types: [], strict: true}`. Loading refuses a model whose saved values differ |
 | `env` | `conda.yaml` and `python_env.yaml` |
+| `python_version` | Python version at save time, recorded by MLflow |
 
 The model signature declares params and no inputs. See [pyfunc contract](pyfunc-contract.md).
 
@@ -72,8 +73,8 @@ The model signature declares params and no inputs. See [pyfunc contract](pyfunc-
 | `1` | Loads | Reports no format problem |
 | Any other, missing or unparseable | Raises `FormatVersionError` | Reports the format as the only problem |
 
-A component file name that contains a path separator, or is `.` or `..`, raises
-`YohouMlflowError`.
+A component file name that is empty, contains a path separator, or is `.` or `..`,
+raises `YohouMlflowError`.
 
 ## Trust policy
 
@@ -81,7 +82,7 @@ A type in `forecaster.skops` is trusted when any of the following holds:
 
 | Rule | Types |
 |---|---|
-| skops default | Types skops trusts on its own, including most scikit-learn estimators and numpy types |
+| skops default | Types skops trusts on its own, including most scikit-learn, numpy and scipy types |
 | Prefix | `yohou.`, `sklearn.`, `polars.datatypes.` |
 | Exact name | `polars.dataframe.frame.DataFrame`, `polars.series.series.Series`, `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `zoneinfo.ZoneInfo` |
 | Caller | Names passed as `extra_trusted_types`, to `save_model`, `log_model`, `load_model`, `check_compatibility`, or to `mlflow.pyfunc.load_model` through `model_config` |
@@ -128,8 +129,8 @@ any `code` directory named in `flavors.python_function` before calling this pack
 
 ## Save checks
 
-`save_model` applies these checks after writing `forecaster.skops` and removes the
-directory if one fails:
+`save_model` applies the first check before anything is written, and the others after
+writing `forecaster.skops`, removing the directory if one fails:
 
 | Check | Failure |
 |---|---|
@@ -147,12 +148,12 @@ skipped and a `UserWarning` is emitted.
 installed version (`get_default_pip_requirements`). `pip_requirements` replaces them;
 `extra_pip_requirements` adds to them.
 
-## Known limitation: time zones
+## Time zones
 
-skops 0.15.0 and earlier cannot rebuild `zoneinfo.ZoneInfo`. A forecaster fitted on
-time-zone-aware data (any time zone, including UTC) holds one in `observed_time_`, so
-`save_model` raises `SaveVerificationError` naming time-zone-aware data. Such
-forecasters save and load once a skops release supports `ZoneInfo`.
+A forecaster fitted on time-zone-aware data holds its time zone in `observed_time_` as a
+`zoneinfo.ZoneInfo`, including fixed offsets such as `+02:00`, which polars returns as
+`ZoneInfo` too. It is saved and restored. This requires skops 0.16.0 or later, the
+package's minimum.
 
 ## Errors
 

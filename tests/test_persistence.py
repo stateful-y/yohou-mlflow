@@ -18,12 +18,12 @@ from yohou.point import PointReductionForecaster
 
 import yohou_mlflow
 from conftest import (
+    FAMILIES,
     Case,
     edit_flavor,
     make_case,
     make_series,
     read_flavor,
-    skops_supports_zoneinfo,
 )
 from yohou_mlflow import (
     FormatVersionError,
@@ -138,12 +138,6 @@ def test_user_functions_stay_untrusted() -> None:
 
     types = skops.io.get_untrusted_types(data=skops.io.dumps(FunctionTransformer(identity)))
     assert untrusted_outside_policy(types) == ["local_estimators.identity"]
-
-
-def test_default_allowlist_needs_no_extra_types(point_case: Case, tmp_path: Path) -> None:
-    """A yohou and scikit-learn forecaster saves and loads with no extra trusted types."""
-    loaded = yohou_mlflow.load_model(str(_saved(point_case, tmp_path)))
-    assert loaded.predict().equals(point_case.forecaster.predict())
 
 
 def test_untrusted_type_refused_at_save(local_ridge_case: Case, local_ridge_type: str, tmp_path: Path) -> None:
@@ -408,27 +402,25 @@ def test_verification_without_predictable_original(
     assert (path / "MLmodel").is_file()
 
 
-def test_time_zone_aware_forecaster(tmp_path: Path) -> None:
-    """A UTC forecaster round-trips when skops can rebuild ZoneInfo, else is refused at save."""
-    data = make_series(time_zone="UTC")
+@pytest.mark.parametrize("time_zone", ["UTC", "Etc/GMT-2"])
+def test_time_zone_aware_forecaster(time_zone: str, tmp_path: Path) -> None:
+    """A forecaster fitted on time-zone-aware data round-trips, time zone included."""
+    data = make_series(time_zone=time_zone)
     forecaster = PointReductionForecaster(estimator=Ridge())
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         forecaster.fit(data[:180], forecasting_horizon=5)
         forecaster.observe(data[180:190])
-    path = tmp_path / "model"
-    if skops_supports_zoneinfo():
-        yohou_mlflow.save_model(forecaster, path)
-        assert yohou_mlflow.load_model(str(path)).predict().equals(forecaster.predict())
-    else:
-        with pytest.raises(SaveVerificationError, match="time-zone-aware"):
-            yohou_mlflow.save_model(forecaster, path)
-        assert not path.exists()
+    yohou_mlflow.save_model(forecaster, tmp_path / "model")
+    loaded = yohou_mlflow.load_model(str(tmp_path / "model"))
+    assert loaded.observed_time_ == forecaster.observed_time_
+    assert str(loaded.observed_time_.tzinfo) == time_zone
+    assert loaded.predict().equals(forecaster.predict())
 
 
 def test_every_family_saves_within_policy() -> None:
     """Each test family's forecaster holds only types the policy trusts."""
-    for family in ("point", "interval", "class_proba", "panel", "composite"):
+    for family in FAMILIES:
         types = skops.io.get_untrusted_types(data=skops.io.dumps(make_case(family).forecaster))
         assert untrusted_outside_policy(types) == [], family
 
