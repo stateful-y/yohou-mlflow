@@ -84,7 +84,7 @@ A type in `forecaster.skops` is trusted when any of the following holds:
 |---|---|
 | skops default | Types skops trusts on its own, including most scikit-learn, numpy and scipy types |
 | Prefix | `yohou.`, `sklearn.`, `polars.datatypes.` |
-| Exact name | `polars.dataframe.frame.DataFrame`, `polars.series.series.Series`, `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `zoneinfo.ZoneInfo` |
+| Exact name | `polars.dataframe.frame.DataFrame`, `polars.series.series.Series`, `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `datetime.timezone`, `zoneinfo.ZoneInfo` |
 | Caller | Names passed as `extra_trusted_types`, to `save_model`, `log_model`, `load_model`, `check_compatibility`, or to `mlflow.pyfunc.load_model` through `model_config` |
 
 The prefixes and exact names are exported as `yohou_mlflow.TRUSTED_TYPE_PREFIXES` and
@@ -148,12 +148,12 @@ skipped and a `UserWarning` is emitted.
 installed version (`get_default_pip_requirements`). `pip_requirements` replaces them;
 `extra_pip_requirements` adds to them.
 
-## Known limitation: time zones
+## Time zones
 
-skops 0.15.0 and earlier cannot rebuild `zoneinfo.ZoneInfo`. A forecaster fitted on
-time-zone-aware data (any time zone, including UTC) holds one in `observed_time_`, so
-`save_model` raises `SaveVerificationError` naming time-zone-aware data. Such
-forecasters save and load once a skops release supports `ZoneInfo`.
+A forecaster fitted on time-zone-aware data holds its time zone in `observed_time_`, as a
+`zoneinfo.ZoneInfo` (polars also returns fixed offsets such as `+02:00` as `ZoneInfo`) or
+a `datetime.timezone`. Both are saved and restored. This requires skops 0.16.0 or later,
+the package's minimum.
 
 ## Errors
 

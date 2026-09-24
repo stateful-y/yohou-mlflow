@@ -10,7 +10,6 @@ import mlflow
 import numpy as np
 import polars as pl
 import pytest
-import skops.io
 import yaml
 from hypothesis import settings
 from hypothesis.database import DirectoryBasedExampleDatabase
@@ -218,14 +217,3 @@ def edit_flavor(path: Path, **changes: Any) -> None:
     mlmodel = yaml.safe_load((path / "MLmodel").read_text())
     mlmodel["flavors"]["yohou"].update(changes)
     (path / "MLmodel").write_text(yaml.safe_dump(mlmodel))
-
-
-def skops_supports_zoneinfo() -> bool:
-    """Return whether the installed skops can rebuild a ``zoneinfo.ZoneInfo``."""
-    from zoneinfo import ZoneInfo
-
-    try:
-        loaded = skops.io.loads(skops.io.dumps(ZoneInfo("UTC")), trusted=["zoneinfo.ZoneInfo"])
-    except TypeError:
-        return False
-    return loaded == ZoneInfo("UTC")

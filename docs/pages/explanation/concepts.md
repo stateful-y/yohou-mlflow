@@ -96,14 +96,15 @@ code runs, but a crafted file does reach a native parser.
 ## Why every save is loaded back
 
 A model that saves correctly but cannot be loaded is the worst case for a scheduled job,
-because the failure appears months after the save. This is not hypothetical: with skops
-0.15.0, any forecaster fitted on time-zone-aware data, even UTC, saves without error and
-then fails to load, because skops cannot rebuild the `zoneinfo.ZoneInfo` that yohou
-keeps in `observed_time_`. A fix is being contributed to skops.
+because the failure appears months after the save. This is not hypothetical: skops 0.15.0
+saved any forecaster fitted on time-zone-aware data, even UTC, without error, and then
+failed to load it, because it could not rebuild the `zoneinfo.ZoneInfo` that yohou keeps
+in `observed_time_`. The check below caught it before any such model was kept, and the fix
+landed in skops 0.16.0, which this package now requires.
 
 So `save_model` loads what it just wrote and compares its predictions with the
-original's before keeping anything. The check is general: it catches the time-zone case
-today, and whatever gap a future skops or polars release introduces. When a forecaster
+original's before keeping anything. The check is general: it caught the time-zone case,
+and it catches whatever gap a future skops or polars release introduces. When a forecaster
 cannot predict without inputs, for example because it needs future features, the load is
 still verified and the comparison is skipped with a warning.
 

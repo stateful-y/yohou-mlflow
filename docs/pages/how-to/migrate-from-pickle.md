@@ -76,12 +76,6 @@ Replace the loading code in your scheduled jobs with
 `yohou_mlflow.load_model("models:/daily-demand/latest")`, and the saving code with
 `yohou_mlflow.log_model(...)`.
 
-## Troubleshooting
-
-**Problem: `SaveVerificationError` mentioning time-zone-aware data**
-: The installed skops cannot rebuild the time zones the forecaster holds. See the
-  time-zone limitation in [Saved model format](../reference/saved-model-format.md).
-
 ## See Also
 
 - [How to check that a registered model will load](check-before-deploying.md)
