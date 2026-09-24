@@ -148,12 +148,12 @@ skipped and a `UserWarning` is emitted.
 installed version (`get_default_pip_requirements`). `pip_requirements` replaces them;
 `extra_pip_requirements` adds to them.
 
-## Known limitation: time zones
+## Time zones
 
-skops 0.15.0 and earlier cannot rebuild `zoneinfo.ZoneInfo`. A forecaster fitted on
-time-zone-aware data (any time zone, including UTC) holds one in `observed_time_`, so
-`save_model` raises `SaveVerificationError` naming time-zone-aware data. Such
-forecasters save and load once a skops release supports `ZoneInfo`.
+A forecaster fitted on time-zone-aware data holds its time zone in `observed_time_` as a
+`zoneinfo.ZoneInfo`, including fixed offsets such as `+02:00`, which polars returns as
+`ZoneInfo` too. It is saved and restored. This requires skops 0.16.0 or later, the
+package's minimum.
 
 ## Errors
 

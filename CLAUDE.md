@@ -45,9 +45,9 @@ Source lives in `src/yohou_mlflow/`, tests in `tests/`.
 - **Loading is strict about versions**: yohou must match exactly, scikit-learn and
   polars by major and minor version. Migrations across yohou versions belong in yohou
   itself, not here.
-- **Every save is loaded back and compared** before it is kept. skops 0.15.0 cannot
-  rebuild `zoneinfo.ZoneInfo`, so forecasters fitted on time-zone-aware data are refused
-  at save time until a skops release fixes it (skops-dev/skops#545).
+- **Every save is loaded back and compared** before it is kept. That check is what
+  caught skops 0.15.0 saving time-zone-aware forecasters it could not load
+  (skops-dev/skops#545); the floor is now `skops>=0.16.0`, which fixed it.
 - **Only public yohou API.** Reading private yohou attributes would break on any yohou
   rename. The private `mlflow.utils` helpers in `_persistence.py` were checked on
   mlflow-skinny 3.0.0 and 3.16.1.
