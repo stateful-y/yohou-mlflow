@@ -16,7 +16,7 @@ import shutil
 import warnings
 import zipfile
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -145,14 +145,15 @@ def save_model(
     sklearn.exceptions.NotFittedError
         If ``forecaster`` is not fitted. Nothing is written.
     ValueError
-        If ``signature`` has an input schema or redefines a flavour param.
+        If ``signature`` has an input schema or redefines a flavour param, or the
+        forecaster supports none of the ``point``, ``interval`` and ``class_proba``
+        prediction types.
     UntrustedTypesError
         If the forecaster holds types outside the trust policy and
         ``extra_trusted_types``.
     SaveVerificationError
         If the written model cannot be loaded back, fails to predict once reloaded, or
-        loads back with different predictions, including forecasters fitted on time-zone-aware data while
-        skops cannot rebuild ``zoneinfo.ZoneInfo``.
+        loads back with different predictions.
 
     See Also
     --------
@@ -252,15 +253,7 @@ def _verify_round_trip(original: Any, data: bytes, types: list[str], default_typ
     try:
         loaded = skops.io.loads(data, trusted=list(types))
     except Exception as exc:
-        if "zoneinfo.ZoneInfo" in types:
-            msg = (
-                "The forecaster was fitted on time-zone-aware data, and the installed skops "
-                "cannot rebuild the zoneinfo.ZoneInfo time zones it holds, so the saved model "
-                f"could not be loaded back ({type(exc).__name__}: {exc}). Nothing was saved. "
-                "Fit on time-zone-naive data, or upgrade skops once a release supports ZoneInfo."
-            )
-        else:
-            msg = f"The saved forecaster could not be loaded back ({type(exc).__name__}: {exc}). Nothing was saved."
+        msg = f"The saved forecaster could not be loaded back ({type(exc).__name__}: {exc}). Nothing was saved."
         raise SaveVerificationError(msg) from exc
 
     method = _PREDICT_METHODS[default_type]
@@ -494,8 +487,8 @@ class CompatibilityReport:
     loadable: bool
     problems: tuple[str, ...]
     format_version: str
-    version_mismatches: tuple[VersionMismatch, ...] = field(default=())
-    untrusted_types: tuple[str, ...] = field(default=())
+    version_mismatches: tuple[VersionMismatch, ...] = ()
+    untrusted_types: tuple[str, ...] = ()
 
     def __str__(self) -> str:
         """Summarize the report in a few lines.
