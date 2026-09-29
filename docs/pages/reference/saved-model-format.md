@@ -86,7 +86,7 @@ A type in `forecaster.skops` is trusted when any of the following holds:
 | Prefix | `yohou.`, `sklearn.`, `polars.datatypes.` |
 | Exact name | `polars.dataframe.frame.DataFrame`, `polars.series.series.Series`, `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `zoneinfo.ZoneInfo` |
 | Caller, exact | Names passed as `extra_trusted_types`, to `save_model`, `log_model`, `load_model`, `check_compatibility`, or to `mlflow.pyfunc.load_model` through `model_config` |
-| Caller, prefix | Module prefixes passed as `extra_trusted_prefixes` to `save_model`, `log_model`, `load_model` or `check_compatibility`. Each must end in `.`, or the call raises `ValueError` |
+| Caller, prefix | Module prefixes passed as `extra_trusted_prefixes`, to the same calls and `model_config` keys as exact names. Each must be a module path ending in `.`, or the call raises `ValueError` |
 
 The prefixes and exact names are exported as `yohou_mlflow.TRUSTED_TYPE_PREFIXES` and
 `yohou_mlflow.TRUSTED_TYPES`.
@@ -108,7 +108,7 @@ The rules are exported as `yohou_mlflow.VERSION_RULES`.
 
 `extra_version_rules` adds rules for other packages, as a mapping of distribution name to
 `"exact"` or `"major.minor"`, on `save_model`, `log_model`, `load_model` and
-`check_compatibility`. At save, a declared package is recorded in `versions` only when
+`check_compatibility`, and as a `model_config` key of `mlflow.pyfunc.load_model`. At save, a declared package is recorded in `versions` only when
 `forecaster.skops` holds a type from one of its top-level modules. At load, a recorded
 package is compared only under a rule the loading call declares. A rule for a package in
 `VERSION_RULES`, or a rule other than `"exact"` and `"major.minor"`, raises `ValueError`.

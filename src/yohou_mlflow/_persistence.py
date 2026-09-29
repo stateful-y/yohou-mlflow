@@ -58,14 +58,14 @@ from yohou_mlflow._pyfunc import (
     merge_signature,
     supported_prediction_types,
 )
-from yohou_mlflow._trust import check_prefixes, untrusted_outside_policy
+from yohou_mlflow._trust import untrusted_outside_policy, validate_prefixes
 from yohou_mlflow._versions import (
     VersionMismatch,
-    check_version_rules,
     compare_versions,
     describe_mismatches,
     held_versions,
     installed_versions,
+    validate_version_rules,
 )
 
 FLAVOR_NAME = "yohou"
@@ -76,7 +76,12 @@ FORMAT_VERSION = "1.0"
 
 _SUPPORTED_FORMAT_MAJOR = 1
 # pyfunc load options and the only values a saved model may carry for them.
-_SAVED_LOAD_OPTIONS: dict[str, Any] = {"extra_trusted_types": [], "strict": True}
+_SAVED_LOAD_OPTIONS: dict[str, Any] = {
+    "extra_trusted_types": [],
+    "extra_trusted_prefixes": [],
+    "extra_version_rules": {},
+    "strict": True,
+}
 _FORECASTER_COMPONENT = "forecaster"
 _FORECASTER_FILE = "forecaster.skops"
 
@@ -163,11 +168,11 @@ def save_model(
     ValueError
         If ``signature`` has an input schema or redefines a flavour param, the
         forecaster supports none of the ``point``, ``interval`` and ``class_proba``
-        prediction types, a trusted prefix does not end in ``"."``, or a version rule
+        prediction types, a trusted prefix is not a module path ending in ``"."``, or a version rule
         is unknown or names a built-in package.
     UntrustedTypesError
-        If the forecaster holds types outside the trust policy and
-        ``extra_trusted_types``.
+        If the forecaster holds types outside the trust policy and the caller's
+        additions.
     SaveVerificationError
         If the written model cannot be loaded back, fails to predict once reloaded, or
         loads back with different predictions.
@@ -185,8 +190,8 @@ def save_model(
         )
         raise TypeError(msg)
     check_is_fitted(forecaster)
-    check_prefixes(extra_trusted_prefixes)
-    check_version_rules(extra_version_rules)
+    validate_prefixes(extra_trusted_prefixes)
+    validate_version_rules(extra_version_rules)
     _validate_env_arguments(conda_env, pip_requirements, extra_pip_requirements)
     supported = supported_prediction_types(forecaster)
     default_type = default_prediction_type(supported)
@@ -449,15 +454,15 @@ def load_model(
     UntrustedTypesError
         If the skops file holds types outside the policy and the caller's additions.
     ValueError
-        If a trusted prefix does not end in ``"."``, or a version rule is unknown or
+        If a trusted prefix is not a module path ending in ``"."``, or a version rule is unknown or
         names a built-in package.
 
     See Also
     --------
     check_compatibility : Run the same checks without loading anything.
     """
-    check_prefixes(extra_trusted_prefixes)
-    check_version_rules(extra_version_rules)
+    validate_prefixes(extra_trusted_prefixes)
+    validate_version_rules(extra_version_rules)
     local = download_artifacts(artifact_uri=model_uri, dst_path=dst_path)
     forecaster, _ = _load_local(
         local,
@@ -473,9 +478,9 @@ def _load_local(
     local: str,
     *,
     extra_trusted_types: Iterable[str] | None,
+    extra_trusted_prefixes: Iterable[str] | None,
+    extra_version_rules: Mapping[str, str] | None,
     strict: bool,
-    extra_trusted_prefixes: Iterable[str] | None = None,
-    extra_version_rules: Mapping[str, str] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """Check format, versions and trust for a local model directory, then load it."""
     conf = _get_flavor_configuration(local, FLAVOR_NAME)
@@ -595,15 +600,15 @@ def check_compatibility(
     Raises
     ------
     ValueError
-        If a trusted prefix does not end in ``"."``, or a version rule is unknown or
+        If a trusted prefix is not a module path ending in ``"."``, or a version rule is unknown or
         names a built-in package.
 
     See Also
     --------
     load_model : Load the forecaster once the report is clean.
     """
-    check_prefixes(extra_trusted_prefixes)
-    check_version_rules(extra_version_rules)
+    validate_prefixes(extra_trusted_prefixes)
+    validate_version_rules(extra_version_rules)
     local = download_artifacts(artifact_uri=model_uri, dst_path=dst_path)
     conf = _get_flavor_configuration(local, FLAVOR_NAME)
     try:
@@ -635,7 +640,9 @@ def _load_pyfunc(path: str, model_config: dict[str, Any] | None = None) -> Yohou
         Local model directory.
     model_config : dict or None, default=None
         Load options passed as ``mlflow.pyfunc.load_model(..., model_config=...)``:
-        ``extra_trusted_types`` (list of str) and ``strict`` (bool, default ``True``).
+        ``extra_trusted_types`` (list of str), ``extra_trusted_prefixes`` (list of str),
+        ``extra_version_rules`` (mapping of str to str) and ``strict`` (bool, default
+        ``True``), as for `load_model`.
 
     Returns
     -------
@@ -652,7 +659,7 @@ def _load_pyfunc(path: str, model_config: dict[str, Any] | None = None) -> Yohou
     -----
     MLflow merges the caller's ``model_config`` into the options saved in the model,
     and drops, with a warning, any key the model was not saved with. The saved values
-    are the safe ones (no extra trusted types, strict), and they are read back from
+    are the safe ones (no caller additions, strict), and they are read back from
     the ``MLmodel`` file here so that a file cannot pre-set a weaker value.
     """
     saved = Model.load(os.path.join(path, MLMODEL_FILE_NAME)).flavors.get(pyfunc.FLAVOR_NAME, {})
@@ -669,6 +676,10 @@ def _load_pyfunc(path: str, model_config: dict[str, Any] | None = None) -> Yohou
         raise YohouMlflowError(msg)
     config = dict(model_config or {})
     forecaster, conf = _load_local(
-        path, extra_trusted_types=config.get("extra_trusted_types"), strict=bool(config.get("strict", True))
+        path,
+        extra_trusted_types=config.get("extra_trusted_types"),
+        extra_trusted_prefixes=config.get("extra_trusted_prefixes"),
+        extra_version_rules=config.get("extra_version_rules"),
+        strict=bool(config.get("strict", True)),
     )
     return YohouPyfuncModel(forecaster, conf.get("default_prediction_type") or "point")

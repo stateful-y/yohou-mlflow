@@ -71,7 +71,7 @@ _RULE_NAMES = ("exact", "major.minor")
 _NOT_INSTALLED = "(not installed)"
 
 
-def check_version_rules(rules: Mapping[str, str] | None) -> dict[str, str]:
+def validate_version_rules(rules: Mapping[str, str] | None) -> dict[str, str]:
     """Return caller-declared version rules keyed by canonical distribution name.
 
     Parameters
@@ -119,7 +119,7 @@ def held_versions(type_names: Iterable[str], extra_version_rules: Mapping[str, s
         Canonical distribution name to installed version, for each declared package
         that provides the top-level module of at least one of ``type_names``.
     """
-    rules = check_version_rules(extra_version_rules)
+    rules = validate_version_rules(extra_version_rules)
     if not rules:
         return {}
     held_modules = {name.partition(".")[0] for name in type_names}
@@ -180,12 +180,12 @@ def compare_versions(
     >>> [str(m) for m in compare_versions(saved, now)]
     ['polars: saved with 1.44.2, installed 1.45.0 (major and minor versions must match)']
     """
-    rules = {**VERSION_RULES, **check_version_rules(extra_version_rules)}
+    rules = {**VERSION_RULES, **validate_version_rules(extra_version_rules)}
     if installed is not None:
         current = dict(installed)
     else:
         current = installed_versions()
-        current.update({package: _installed_version(package) for package in rules if package not in current})
+        current.update({package: _installed_version(package) for package in rules})
     mismatches = []
     for package, rule in rules.items():
         if rule is None or package not in recorded:

@@ -36,7 +36,7 @@ TRUSTED_TYPES: frozenset[str] = frozenset({
 })
 
 
-def check_prefixes(prefixes: Iterable[str] | None) -> tuple[str, ...]:
+def validate_prefixes(prefixes: Iterable[str] | None) -> tuple[str, ...]:
     """Return caller-given trusted prefixes, refusing any that does not end a module name.
 
     Parameters
@@ -52,8 +52,8 @@ def check_prefixes(prefixes: Iterable[str] | None) -> tuple[str, ...]:
     Raises
     ------
     ValueError
-        If a prefix does not end in ``"."``, since ``"mypkg"`` would also match a module
-        named ``mypkg_other``.
+        If a prefix is not a module path ending in ``"."``, since ``"mypkg"`` would also
+        match a module named ``mypkg_other``.
     """
     checked = tuple(prefixes or ())
     bad = [prefix for prefix in checked if not prefix.endswith(".") or prefix == "."]
@@ -85,7 +85,7 @@ def is_trusted(
     Raises
     ------
     ValueError
-        If a prefix does not end in ``"."``.
+        If a prefix is not a module path ending in ``"."``.
 
     Examples
     --------
@@ -98,10 +98,15 @@ def is_trusted(
     >>> is_trusted("mypkg.features.Lags", extra_trusted_prefixes=["mypkg."])
     True
     """
+    return _is_trusted(type_name, frozenset(extra_trusted_types), validate_prefixes(extra_trusted_prefixes))
+
+
+def _is_trusted(type_name: str, extra_trusted_types: frozenset[str], extra_trusted_prefixes: tuple[str, ...]) -> bool:
+    """Match one name against the policy and already-validated caller additions."""
     return (
         type_name in TRUSTED_TYPES
-        or type_name.startswith(TRUSTED_TYPE_PREFIXES + check_prefixes(extra_trusted_prefixes))
-        or type_name in set(extra_trusted_types)
+        or type_name.startswith(TRUSTED_TYPE_PREFIXES + extra_trusted_prefixes)
+        or type_name in extra_trusted_types
     )
 
 
@@ -131,6 +136,6 @@ def untrusted_outside_policy(
     >>> untrusted_outside_policy(["datetime.datetime", "lightgbm.sklearn.LGBMRegressor"])
     ['lightgbm.sklearn.LGBMRegressor']
     """
-    extra = tuple(extra_trusted_types or ())
-    prefixes = check_prefixes(extra_trusted_prefixes)
-    return sorted({name for name in type_names if not is_trusted(name, extra, prefixes)})
+    extra = frozenset(extra_trusted_types or ())
+    prefixes = validate_prefixes(extra_trusted_prefixes)
+    return sorted({name for name in type_names if not _is_trusted(name, extra, prefixes)})

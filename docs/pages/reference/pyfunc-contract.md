@@ -12,9 +12,13 @@ model = mlflow.pyfunc.load_model(model_uri, model_config=None)
 | `model_config` key | Type | Default | Meaning |
 |---|---|---|---|
 | `extra_trusted_types` | list of string | `[]` | Type names to trust in addition to the trust policy |
+| `extra_trusted_prefixes` | list of string | `[]` | Module prefixes to trust, each ending in `.` |
+| `extra_version_rules` | mapping of string to string | `{}` | Version rules for packages outside the built-in ones |
 | `strict` | bool | `true` | Raise on a package version mismatch; `false` warns and loads |
 
-MLflow drops any other key with a warning. The loading checks are those of
+MLflow drops any other key with a warning, including a key the model was not saved
+with: a model saved by a yohou-mlflow release without the two `extra_*` keys above
+accepts only `extra_trusted_types` and `strict`. The loading checks are those of
 `load_model`; see [Saved model format](saved-model-format.md#load-order).
 
 Before those checks run, MLflow imports the `loader_module` and any `code` directory

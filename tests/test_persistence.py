@@ -483,18 +483,6 @@ _LOCAL_PREFIX = "local_estimators."
 _LOCAL_RULES = {"local-estimators": "major.minor"}
 
 
-@pytest.fixture
-def local_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make ``local_estimators`` look like the module of an installed distribution at 1.2.3."""
-    from yohou_mlflow import _versions
-
-    real = _versions.version
-    monkeypatch.setattr(
-        _versions, "packages_distributions", lambda: {"local_estimators": ["other-distribution", "local_estimators"]}
-    )
-    monkeypatch.setattr(_versions, "version", lambda name: "1.2.3" if name == "local-estimators" else real(name))
-
-
 def test_trusted_prefix_matches_a_package_only() -> None:
     """A prefix trusts its package's modules and nothing that merely shares its spelling."""
     assert is_trusted("mypkg.features.Lags", extra_trusted_prefixes=["mypkg."])
@@ -511,6 +499,10 @@ def test_trusted_prefix_must_end_a_module(prefix: str, point_case: Case, tmp_pat
     with pytest.raises(ValueError, match="ending in '.'"):
         yohou_mlflow.save_model(point_case.forecaster, path, extra_trusted_prefixes=[prefix])
     assert not path.exists()
+    # Refused before the model is fetched: the URI does not exist.
+    for check in (yohou_mlflow.load_model, yohou_mlflow.check_compatibility):
+        with pytest.raises(ValueError, match="ending in '.'"):
+            check(str(tmp_path / "missing"), extra_trusted_prefixes=[prefix])
 
 
 def test_trusted_prefix_at_save_load_and_check(local_ridge_case: Case, tmp_path: Path) -> None:
@@ -521,6 +513,7 @@ def test_trusted_prefix_at_save_load_and_check(local_ridge_case: Case, tmp_path:
     assert yohou_mlflow.check_compatibility(str(path), extra_trusted_prefixes=[_LOCAL_PREFIX]).loadable
     with pytest.raises(UntrustedTypesError, match="extra_trusted_prefixes"):
         yohou_mlflow.load_model(str(path))
+    assert "extra_trusted_prefixes" in yohou_mlflow.check_compatibility(str(path)).problems[0]
 
 
 def test_log_model_passes_caller_additions(local_ridge_case: Case, tracking: str, local_distribution: None) -> None:
@@ -546,6 +539,9 @@ def test_version_rules_are_checked(rules: dict, match: str, point_case: Case, tm
         yohou_mlflow.save_model(point_case.forecaster, tmp_path / "model", extra_version_rules=rules)
     with pytest.raises(ValueError, match=match):
         compare_versions({}, extra_version_rules=rules)
+    for check in (yohou_mlflow.load_model, yohou_mlflow.check_compatibility):
+        with pytest.raises(ValueError, match=match):
+            check(str(tmp_path / "missing"), extra_version_rules=rules)
 
 
 def test_held_package_version_is_recorded(
@@ -586,3 +582,26 @@ def test_uninstalled_rule_package_reported() -> None:
     """A recorded package that is no longer installed breaks its rule."""
     mismatches = compare_versions({"not-a-real-package": "1.0"}, extra_version_rules={"not-a-real-package": "exact"})
     assert [m.installed for m in mismatches] == ["(not installed)"]
+
+
+def test_rule_names_are_canonicalized(local_ridge_case: Case, tmp_path: Path, local_distribution: None) -> None:
+    """A rule spelled differently from its distribution records the canonical name."""
+    path = _saved(
+        local_ridge_case,
+        tmp_path,
+        extra_trusted_prefixes=[_LOCAL_PREFIX],
+        extra_version_rules={"Local_Estimators": "major.minor"},
+    )
+    assert read_flavor(path)["versions"]["local-estimators"] == "1.2.3"
+
+
+def test_held_package_exact_rule(local_ridge_case: Case, tmp_path: Path, local_distribution: None) -> None:
+    """An exact rule loads the same version and refuses a patch bump."""
+    kwargs = {"extra_trusted_prefixes": [_LOCAL_PREFIX], "extra_version_rules": {"local-estimators": "exact"}}
+    path = _saved(local_ridge_case, tmp_path, **kwargs)
+    assert yohou_mlflow.load_model(str(path), **kwargs).predict().equals(local_ridge_case.forecaster.predict())
+    edit_flavor(path, versions=dict(read_flavor(path)["versions"], **{"local-estimators": "1.2.4"}))
+    with pytest.raises(
+        VersionMismatchError, match=r"local-estimators: saved with 1\.2\.4, installed 1\.2\.3 \(must match exactly\)"
+    ):
+        yohou_mlflow.load_model(str(path), **kwargs)

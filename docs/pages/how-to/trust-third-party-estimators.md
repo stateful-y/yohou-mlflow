@@ -71,10 +71,10 @@ If you load the forecaster itself:
 forecaster = yohou_mlflow.load_model("models:/daily-demand/latest", extra_trusted_types=trusted)
 ```
 
-Pass `extra_trusted_prefixes` the same way. `mlflow.pyfunc.load_model` accepts exact
-names only.
+Pass `extra_trusted_prefixes` the same way.
 
-If you load it through MLflow's generic interface, pass the list in `model_config`:
+If you load it through MLflow's generic interface, pass the same options in
+`model_config`:
 
 ```python
 import mlflow.pyfunc
@@ -95,6 +95,8 @@ rules = {"lightgbm": "major.minor"}
 yohou_mlflow.save_model(forecaster, "model", extra_trusted_types=trusted, extra_version_rules=rules)
 forecaster = yohou_mlflow.load_model("model", extra_trusted_types=trusted, extra_version_rules=rules)
 ```
+
+Through MLflow's generic interface, pass `rules` as `extra_version_rules` in `model_config`.
 
 The version is recorded only when the forecaster holds a type from that package, so a
 forecaster without it is never refused over a lightgbm upgrade.
