@@ -176,6 +176,18 @@ def local_ridge_type() -> str:
     return f"{LocalRidge.__module__}.{LocalRidge.__qualname__}"
 
 
+@pytest.fixture
+def local_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ``local_estimators`` look like the module of an installed distribution at 1.2.3."""
+    from yohou_mlflow import _versions
+
+    real = _versions.version
+    monkeypatch.setattr(
+        _versions, "packages_distributions", lambda: {"local_estimators": ["other-distribution", "local_estimators"]}
+    )
+    monkeypatch.setattr(_versions, "version", lambda name: "1.2.3" if name == "local-estimators" else real(name))
+
+
 @pytest.fixture(autouse=True)
 def _run_in_tmp_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Run every test from its own temporary directory.

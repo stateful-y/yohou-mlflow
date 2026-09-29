@@ -21,7 +21,7 @@ checks `load_model` and `check_compatibility` apply to it. Format version `1.0`
 |---|---|---|
 | `format_version` | string | `"1.0"` |
 | `components` | mapping | Component name to file name. Format 1.0: `{forecaster: forecaster.skops}` |
-| `versions` | mapping | Installed version at save time of `yohou`, `scikit-learn`, `polars`, `skops`, `yohou-mlflow` |
+| `versions` | mapping | Installed version at save time of `yohou`, `scikit-learn`, `polars`, `skops`, `yohou-mlflow`, and of each package named in `extra_version_rules` that the forecaster holds a type from |
 | `recorded_types` | list of string | Types in `forecaster.skops` that skops does not trust by default. Informational: never used to grant trust |
 | `forecaster_class` | string | Fully qualified class of the saved forecaster |
 | `forecaster_type` | list of string | Supported prediction types, from the forecaster's `forecaster_type` tag |
@@ -85,7 +85,8 @@ A type in `forecaster.skops` is trusted when any of the following holds:
 | skops default | Types skops trusts on its own, including most scikit-learn, numpy and scipy types |
 | Prefix | `yohou.`, `sklearn.`, `polars.datatypes.` |
 | Exact name | `polars.dataframe.frame.DataFrame`, `polars.series.series.Series`, `datetime.date`, `datetime.datetime`, `datetime.timedelta`, `zoneinfo.ZoneInfo` |
-| Caller | Names passed as `extra_trusted_types`, to `save_model`, `log_model`, `load_model`, `check_compatibility`, or to `mlflow.pyfunc.load_model` through `model_config` |
+| Caller, exact | Names passed as `extra_trusted_types`, to `save_model`, `log_model`, `load_model`, `check_compatibility`, or to `mlflow.pyfunc.load_model` through `model_config` |
+| Caller, prefix | Module prefixes passed as `extra_trusted_prefixes`, to the same calls and `model_config` keys as exact names. Each must be a module path ending in `.`, or the call raises `ValueError` |
 
 The prefixes and exact names are exported as `yohou_mlflow.TRUSTED_TYPE_PREFIXES` and
 `yohou_mlflow.TRUSTED_TYPES`.
@@ -103,7 +104,16 @@ polars frames are stored in polars' binary format and rebuilt by
 | `skops` | recorded only | Never |
 | `yohou-mlflow` | recorded only | Never |
 
-The rules are exported as `yohou_mlflow.VERSION_RULES`. With `strict=True` (default),
+The rules are exported as `yohou_mlflow.VERSION_RULES`.
+
+`extra_version_rules` adds rules for other packages, as a mapping of distribution name to
+`"exact"` or `"major.minor"`, on `save_model`, `log_model`, `load_model` and
+`check_compatibility`, and as a `model_config` key of `mlflow.pyfunc.load_model`. At save, a declared package is recorded in `versions` only when
+`forecaster.skops` holds a type from one of its top-level modules. At load, a recorded
+package is compared only under a rule the loading call declares. A rule for a package in
+`VERSION_RULES`, or a rule other than `"exact"` and `"major.minor"`, raises `ValueError`.
+
+With `strict=True` (default),
 a mismatch raises `VersionMismatchError`. With `strict=False`, it emits
 `VersionMismatchWarning` with the same text and the load proceeds.
 

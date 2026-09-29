@@ -313,6 +313,46 @@ def test_saved_load_options_cannot_extend_trust(local_ridge_case: Case, local_ri
         mlflow.pyfunc.load_model(str(path))
 
 
+def test_model_config_extra_trusted_prefixes(local_ridge_case: Case, tmp_path: Path) -> None:
+    """``extra_trusted_prefixes`` in ``model_config`` loads a type under that prefix."""
+    path = tmp_path / "model"
+    yohou_mlflow.save_model(local_ridge_case.forecaster, path, extra_trusted_prefixes=["local_estimators."])
+    with pytest.raises(UntrustedTypesError):
+        mlflow.pyfunc.load_model(str(path))
+    model = mlflow.pyfunc.load_model(str(path), model_config={"extra_trusted_prefixes": ["local_estimators."]})
+    assert model.predict({}).equals(local_ridge_case.forecaster.predict())
+
+
+def test_model_config_extra_version_rules(local_ridge_case: Case, tmp_path: Path, local_distribution: None) -> None:
+    """``extra_version_rules`` in ``model_config`` refuses a held package's minor bump."""
+    path = tmp_path / "model"
+    options = {
+        "extra_trusted_prefixes": ["local_estimators."],
+        "extra_version_rules": {"local-estimators": "major.minor"},
+    }
+    yohou_mlflow.save_model(local_ridge_case.forecaster, path, **options)
+    mlmodel = yaml.safe_load((path / "MLmodel").read_text())
+    mlmodel["flavors"]["yohou"]["versions"]["local-estimators"] = "1.1.0"
+    (path / "MLmodel").write_text(yaml.safe_dump(mlmodel))
+    with pytest.raises(VersionMismatchError, match="local-estimators"):
+        mlflow.pyfunc.load_model(str(path), model_config=options)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [("extra_trusted_prefixes", ["local_estimators."]), ("extra_version_rules", {"local-estimators": "exact"})],
+)
+def test_saved_load_options_cannot_preset_caller_additions(point_case: Case, tmp_path: Path, key: str, value) -> None:
+    """A model file that pre-sets a caller addition is refused."""
+    path = tmp_path / "model"
+    yohou_mlflow.save_model(point_case.forecaster, path)
+    mlmodel = yaml.safe_load((path / "MLmodel").read_text())
+    mlmodel["flavors"]["python_function"][mlflow.pyfunc.MODEL_CONFIG][key] = value
+    (path / "MLmodel").write_text(yaml.safe_dump(mlmodel))
+    with pytest.raises(YohouMlflowError, match=key):
+        mlflow.pyfunc.load_model(str(path))
+
+
 # -- Prediction type discovery ------------------------------------------------------
 
 

@@ -15,7 +15,7 @@ import os
 import shutil
 import warnings
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -58,8 +58,15 @@ from yohou_mlflow._pyfunc import (
     merge_signature,
     supported_prediction_types,
 )
-from yohou_mlflow._trust import untrusted_outside_policy
-from yohou_mlflow._versions import VersionMismatch, compare_versions, describe_mismatches, installed_versions
+from yohou_mlflow._trust import untrusted_outside_policy, validate_prefixes
+from yohou_mlflow._versions import (
+    VersionMismatch,
+    compare_versions,
+    describe_mismatches,
+    held_versions,
+    installed_versions,
+    validate_version_rules,
+)
 
 FLAVOR_NAME = "yohou"
 """Name of the flavour in a model's ``MLmodel`` file."""
@@ -69,7 +76,12 @@ FORMAT_VERSION = "1.0"
 
 _SUPPORTED_FORMAT_MAJOR = 1
 # pyfunc load options and the only values a saved model may carry for them.
-_SAVED_LOAD_OPTIONS: dict[str, Any] = {"extra_trusted_types": [], "strict": True}
+_SAVED_LOAD_OPTIONS: dict[str, Any] = {
+    "extra_trusted_types": [],
+    "extra_trusted_prefixes": [],
+    "extra_version_rules": {},
+    "strict": True,
+}
 _FORECASTER_COMPONENT = "forecaster"
 _FORECASTER_FILE = "forecaster.skops"
 
@@ -100,6 +112,8 @@ def save_model(
     path: str | os.PathLike[str],
     *,
     extra_trusted_types: Iterable[str] | None = None,
+    extra_trusted_prefixes: Iterable[str] | None = None,
+    extra_version_rules: Mapping[str, str] | None = None,
     signature: ModelSignature | None = None,
     conda_env: Any = None,
     mlflow_model: Model | None = None,
@@ -124,6 +138,13 @@ def save_model(
         Exact type names to trust in addition to the built-in policy, for example a
         third-party regressor inside the forecaster. They are not stored: pass the
         same names every time the model is loaded.
+    extra_trusted_prefixes : iterable of str or None, default=None
+        Module prefixes to trust, each ending in ``"."``, for example the caller's own
+        package. Not stored: pass the same prefixes every time the model is loaded.
+    extra_version_rules : mapping of str to str or None, default=None
+        Distribution name to ``"exact"`` or ``"major.minor"``, for packages outside the
+        built-in rules. A package's version is recorded only when the forecaster holds
+        a type from it, and compared at load only under the loader's own rules.
     signature : mlflow.models.ModelSignature or None, default=None
         Optional signature. It may carry outputs and extra params, but no inputs.
         The flavour's four params are always added.
@@ -145,12 +166,13 @@ def save_model(
     sklearn.exceptions.NotFittedError
         If ``forecaster`` is not fitted. Nothing is written.
     ValueError
-        If ``signature`` has an input schema or redefines a flavour param, or the
+        If ``signature`` has an input schema or redefines a flavour param, the
         forecaster supports none of the ``point``, ``interval`` and ``class_proba``
-        prediction types.
+        prediction types, a trusted prefix is not a module path ending in ``"."``, or a version rule
+        is unknown or names a built-in package.
     UntrustedTypesError
-        If the forecaster holds types outside the trust policy and
-        ``extra_trusted_types``.
+        If the forecaster holds types outside the trust policy and the caller's
+        additions.
     SaveVerificationError
         If the written model cannot be loaded back, fails to predict once reloaded, or
         loads back with different predictions.
@@ -168,6 +190,8 @@ def save_model(
         )
         raise TypeError(msg)
     check_is_fitted(forecaster)
+    validate_prefixes(extra_trusted_prefixes)
+    validate_version_rules(extra_version_rules)
     _validate_env_arguments(conda_env, pip_requirements, extra_pip_requirements)
     supported = supported_prediction_types(forecaster)
     default_type = default_prediction_type(supported)
@@ -180,6 +204,8 @@ def save_model(
             forecaster,
             target,
             extra_trusted_types=extra_trusted_types,
+            extra_trusted_prefixes=extra_trusted_prefixes,
+            extra_version_rules=extra_version_rules,
             signature=signature,
             supported=supported,
             default_type=default_type,
@@ -199,6 +225,8 @@ def _write_model(
     path: str,
     *,
     extra_trusted_types: Iterable[str] | None,
+    extra_trusted_prefixes: Iterable[str] | None,
+    extra_version_rules: Mapping[str, str] | None,
     signature: ModelSignature,
     supported: frozenset[str],
     default_type: str,
@@ -213,7 +241,7 @@ def _write_model(
     skops.io.dump(forecaster, file, compression=zipfile.ZIP_DEFLATED)
     data = Path(file).read_bytes()
     types = skops.io.get_untrusted_types(data=data)
-    outside = untrusted_outside_policy(types, extra_trusted_types)
+    outside = untrusted_outside_policy(types, extra_trusted_types, extra_trusted_prefixes)
     if outside:
         raise UntrustedTypesError(outside, when="save")
     _verify_round_trip(forecaster, data, types, default_type)
@@ -227,7 +255,7 @@ def _write_model(
         FLAVOR_NAME,
         format_version=FORMAT_VERSION,
         components={_FORECASTER_COMPONENT: _FORECASTER_FILE},
-        versions=installed_versions(),
+        versions={**installed_versions(), **held_versions(types, extra_version_rules)},
         # Informational only: loading never extends trust from this list.
         recorded_types=sorted(types),
         forecaster_class=f"{type(forecaster).__module__}.{type(forecaster).__qualname__}",
@@ -307,6 +335,8 @@ def log_model(
     registered_model_name: str | None = None,
     await_registration_for: int = 300,
     extra_trusted_types: Iterable[str] | None = None,
+    extra_trusted_prefixes: Iterable[str] | None = None,
+    extra_version_rules: Mapping[str, str] | None = None,
     signature: ModelSignature | None = None,
     conda_env: Any = None,
     pip_requirements: Any = None,
@@ -327,6 +357,10 @@ def log_model(
     await_registration_for : int, default=300
         Seconds to wait for the model version to become ready.
     extra_trusted_types : iterable of str or None, default=None
+        See `save_model`.
+    extra_trusted_prefixes : iterable of str or None, default=None
+        See `save_model`.
+    extra_version_rules : mapping of str to str or None, default=None
         See `save_model`.
     signature : mlflow.models.ModelSignature or None, default=None
         See `save_model`.
@@ -362,6 +396,8 @@ def log_model(
         metadata=metadata,
         forecaster=forecaster,
         extra_trusted_types=extra_trusted_types,
+        extra_trusted_prefixes=extra_trusted_prefixes,
+        extra_version_rules=extra_version_rules,
         signature=signature,
         conda_env=conda_env,
         pip_requirements=pip_requirements,
@@ -375,6 +411,8 @@ def load_model(
     dst_path: str | None = None,
     *,
     extra_trusted_types: Iterable[str] | None = None,
+    extra_trusted_prefixes: Iterable[str] | None = None,
+    extra_version_rules: Mapping[str, str] | None = None,
     strict: bool = True,
 ) -> Any:
     """Load a yohou forecaster saved by this flavour.
@@ -392,6 +430,12 @@ def load_model(
     extra_trusted_types : iterable of str or None, default=None
         Exact type names to trust in addition to the built-in policy. The saved model
         cannot add to this list.
+    extra_trusted_prefixes : iterable of str or None, default=None
+        Module prefixes to trust, each ending in ``"."``. The saved model cannot add to
+        them.
+    extra_version_rules : mapping of str to str or None, default=None
+        Rules for packages outside the built-in ones, applied to each such package the
+        model recorded.
     strict : bool, default=True
         When ``True``, a package version mismatch raises `VersionMismatchError`. When
         ``False``, it emits a `VersionMismatchWarning` and the load proceeds.
@@ -408,32 +452,50 @@ def load_model(
     VersionMismatchError
         If ``strict`` and the installed versions break the comparison rules.
     UntrustedTypesError
-        If the skops file holds types outside the policy and ``extra_trusted_types``.
+        If the skops file holds types outside the policy and the caller's additions.
+    ValueError
+        If a trusted prefix is not a module path ending in ``"."``, or a version rule is unknown or
+        names a built-in package.
 
     See Also
     --------
     check_compatibility : Run the same checks without loading anything.
     """
+    validate_prefixes(extra_trusted_prefixes)
+    validate_version_rules(extra_version_rules)
     local = download_artifacts(artifact_uri=model_uri, dst_path=dst_path)
-    forecaster, _ = _load_local(local, extra_trusted_types=extra_trusted_types, strict=strict)
+    forecaster, _ = _load_local(
+        local,
+        extra_trusted_types=extra_trusted_types,
+        extra_trusted_prefixes=extra_trusted_prefixes,
+        extra_version_rules=extra_version_rules,
+        strict=strict,
+    )
     return forecaster
 
 
-def _load_local(local: str, *, extra_trusted_types: Iterable[str] | None, strict: bool) -> tuple[Any, dict[str, Any]]:
+def _load_local(
+    local: str,
+    *,
+    extra_trusted_types: Iterable[str] | None,
+    extra_trusted_prefixes: Iterable[str] | None,
+    extra_version_rules: Mapping[str, str] | None,
+    strict: bool,
+) -> tuple[Any, dict[str, Any]]:
     """Check format, versions and trust for a local model directory, then load it."""
     conf = _get_flavor_configuration(local, FLAVOR_NAME)
     _check_format_version(conf)
     # No `code` directory from the model is ever put on the import path: a saved model
     # could otherwise ship a package named like a trusted one (for example `yohou`) and
     # have it imported while skops resolves the types below.
-    mismatches = compare_versions(conf.get("versions", {}))
+    mismatches = compare_versions(conf.get("versions", {}), extra_version_rules=extra_version_rules)
     if mismatches:
         if strict:
             raise VersionMismatchError(mismatches)
         warnings.warn(describe_mismatches(mismatches), VersionMismatchWarning, stacklevel=3)
     file = _component_path(local, conf, _FORECASTER_COMPONENT)
     types = skops.io.get_untrusted_types(file=file)
-    outside = untrusted_outside_policy(types, extra_trusted_types)
+    outside = untrusted_outside_policy(types, extra_trusted_types, extra_trusted_prefixes)
     if outside:
         raise UntrustedTypesError(outside, when="load")
     return skops.io.load(file, trusted=list(types)), conf
@@ -507,6 +569,8 @@ def check_compatibility(
     model_uri: str,
     extra_trusted_types: Iterable[str] | None = None,
     *,
+    extra_trusted_prefixes: Iterable[str] | None = None,
+    extra_version_rules: Mapping[str, str] | None = None,
     dst_path: str | None = None,
 ) -> CompatibilityReport:
     """Report whether a saved forecaster would load here, without loading it.
@@ -521,6 +585,10 @@ def check_compatibility(
         Any MLflow model URI.
     extra_trusted_types : iterable of str or None, default=None
         Exact type names the eventual load will trust in addition to the policy.
+    extra_trusted_prefixes : iterable of str or None, default=None
+        Module prefixes the eventual load will trust, each ending in ``"."``.
+    extra_version_rules : mapping of str to str or None, default=None
+        Version rules the eventual load will apply beyond the built-in ones.
     dst_path : str or None, default=None
         Local directory to download the model into.
 
@@ -529,10 +597,18 @@ def check_compatibility(
     CompatibilityReport
         ``loadable`` and one problem per reason a strict load would be refused.
 
+    Raises
+    ------
+    ValueError
+        If a trusted prefix is not a module path ending in ``"."``, or a version rule is unknown or
+        names a built-in package.
+
     See Also
     --------
     load_model : Load the forecaster once the report is clean.
     """
+    validate_prefixes(extra_trusted_prefixes)
+    validate_version_rules(extra_version_rules)
     local = download_artifacts(artifact_uri=model_uri, dst_path=dst_path)
     conf = _get_flavor_configuration(local, FLAVOR_NAME)
     try:
@@ -543,14 +619,14 @@ def check_compatibility(
         return CompatibilityReport(False, (str(exc),), str(conf.get("format_version", "")))
 
     problems = []
-    mismatches = tuple(compare_versions(conf.get("versions", {})))
+    mismatches = tuple(compare_versions(conf.get("versions", {}), extra_version_rules=extra_version_rules))
     problems.extend(f"A strict load would refuse the model, version mismatch: {m}" for m in mismatches)
     types = skops.io.get_untrusted_types(file=_component_path(local, conf, _FORECASTER_COMPONENT))
-    outside = tuple(untrusted_outside_policy(types, extra_trusted_types))
+    outside = tuple(untrusted_outside_policy(types, extra_trusted_types, extra_trusted_prefixes))
     if outside:
         problems.append(
             f"A load would refuse the model, types outside the trust policy: {list(outside)}. "
-            "Pass them in extra_trusted_types if you trust them."
+            "Pass them in extra_trusted_types, or their package in extra_trusted_prefixes, if you trust them."
         )
     return CompatibilityReport(not problems, tuple(problems), format_version, mismatches, outside)
 
@@ -564,7 +640,9 @@ def _load_pyfunc(path: str, model_config: dict[str, Any] | None = None) -> Yohou
         Local model directory.
     model_config : dict or None, default=None
         Load options passed as ``mlflow.pyfunc.load_model(..., model_config=...)``:
-        ``extra_trusted_types`` (list of str) and ``strict`` (bool, default ``True``).
+        ``extra_trusted_types`` (list of str), ``extra_trusted_prefixes`` (list of str),
+        ``extra_version_rules`` (mapping of str to str) and ``strict`` (bool, default
+        ``True``), as for `load_model`.
 
     Returns
     -------
@@ -581,7 +659,7 @@ def _load_pyfunc(path: str, model_config: dict[str, Any] | None = None) -> Yohou
     -----
     MLflow merges the caller's ``model_config`` into the options saved in the model,
     and drops, with a warning, any key the model was not saved with. The saved values
-    are the safe ones (no extra trusted types, strict), and they are read back from
+    are the safe ones (no caller additions, strict), and they are read back from
     the ``MLmodel`` file here so that a file cannot pre-set a weaker value.
     """
     saved = Model.load(os.path.join(path, MLMODEL_FILE_NAME)).flavors.get(pyfunc.FLAVOR_NAME, {})
@@ -598,6 +676,10 @@ def _load_pyfunc(path: str, model_config: dict[str, Any] | None = None) -> Yohou
         raise YohouMlflowError(msg)
     config = dict(model_config or {})
     forecaster, conf = _load_local(
-        path, extra_trusted_types=config.get("extra_trusted_types"), strict=bool(config.get("strict", True))
+        path,
+        extra_trusted_types=config.get("extra_trusted_types"),
+        extra_trusted_prefixes=config.get("extra_trusted_prefixes"),
+        extra_version_rules=config.get("extra_version_rules"),
+        strict=bool(config.get("strict", True)),
     )
     return YohouPyfuncModel(forecaster, conf.get("default_prediction_type") or "point")

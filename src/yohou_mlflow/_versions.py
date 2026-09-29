@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, packages_distributions, version
 
+from packaging.utils import canonicalize_name
 from packaging.version import InvalidVersion, Version
 
 # Distribution name -> comparison rule. Recorded but uncompared packages map to None:
@@ -66,6 +67,81 @@ def installed_versions() -> dict[str, str]:
     return {package: version(package) for package in VERSION_RULES}
 
 
+_RULE_NAMES = ("exact", "major.minor")
+_NOT_INSTALLED = "(not installed)"
+
+
+def validate_version_rules(rules: Mapping[str, str] | None) -> dict[str, str]:
+    """Return caller-declared version rules keyed by canonical distribution name.
+
+    Parameters
+    ----------
+    rules : mapping of str to str or None
+        Distribution name to ``"exact"`` or ``"major.minor"``.
+
+    Returns
+    -------
+    dict of str to str
+        The rules, with each name canonicalized (``"Scikit_Learn"`` becomes
+        ``"scikit-learn"``).
+
+    Raises
+    ------
+    ValueError
+        If a rule is neither ``"exact"`` nor ``"major.minor"``, or names a package
+        ``VERSION_RULES`` already covers: a caller may add rules, never change one.
+    """
+    checked = {str(canonicalize_name(package)): rule for package, rule in (rules or {}).items()}
+    built_in = sorted(set(checked) & set(VERSION_RULES))
+    if built_in:
+        msg = f"Version rules for {built_in} are built in and cannot be changed."
+        raise ValueError(msg)
+    unknown = {package: rule for package, rule in checked.items() if rule not in _RULE_NAMES}
+    if unknown:
+        msg = f"Each version rule must be one of {list(_RULE_NAMES)}, got {unknown}."
+        raise ValueError(msg)
+    return checked
+
+
+def held_versions(type_names: Iterable[str], extra_version_rules: Mapping[str, str] | None) -> dict[str, str]:
+    """Return the installed version of each declared package the saved types come from.
+
+    Parameters
+    ----------
+    type_names : iterable of str
+        Fully qualified type names in the saved file.
+    extra_version_rules : mapping of str to str or None
+        Caller-declared rules; only their package names are used here.
+
+    Returns
+    -------
+    dict of str to str
+        Canonical distribution name to installed version, for each declared package
+        that provides the top-level module of at least one of ``type_names``.
+    """
+    rules = validate_version_rules(extra_version_rules)
+    if not rules:
+        return {}
+    held_modules = {name.partition(".")[0] for name in type_names}
+    held: dict[str, str] = {}
+    for module, distributions in packages_distributions().items():
+        if module not in held_modules:
+            continue
+        for distribution in distributions:
+            package = canonicalize_name(distribution)
+            if package in rules:
+                held[package] = version(package)
+    return held
+
+
+def _installed_version(package: str) -> str:
+    """Return the installed version of ``package``, or a marker when it is not installed."""
+    try:
+        return version(package)
+    except PackageNotFoundError:
+        return _NOT_INSTALLED
+
+
 def _major_minor(text: str) -> tuple[int, ...] | str:
     """Return the (major, minor) release of a version, or the text itself if unparseable."""
     try:
@@ -75,8 +151,12 @@ def _major_minor(text: str) -> tuple[int, ...] | str:
         return text
 
 
-def compare_versions(recorded: Mapping[str, str], installed: Mapping[str, str] | None = None) -> list[VersionMismatch]:
-    """Compare recorded versions with installed ones under ``VERSION_RULES``.
+def compare_versions(
+    recorded: Mapping[str, str],
+    installed: Mapping[str, str] | None = None,
+    extra_version_rules: Mapping[str, str] | None = None,
+) -> list[VersionMismatch]:
+    """Compare recorded versions with installed ones under ``VERSION_RULES`` and the caller's rules.
 
     Parameters
     ----------
@@ -84,6 +164,9 @@ def compare_versions(recorded: Mapping[str, str], installed: Mapping[str, str] |
         Versions recorded in the model's flavour configuration.
     installed : mapping of str to str or None, default=None
         Versions to compare against. ``None`` reads the installed packages.
+    extra_version_rules : mapping of str to str or None, default=None
+        Rules for packages outside ``VERSION_RULES``, compared only when the model
+        recorded them.
 
     Returns
     -------
@@ -97,12 +180,17 @@ def compare_versions(recorded: Mapping[str, str], installed: Mapping[str, str] |
     >>> [str(m) for m in compare_versions(saved, now)]
     ['polars: saved with 1.44.2, installed 1.45.0 (major and minor versions must match)']
     """
-    current = dict(installed) if installed is not None else installed_versions()
+    rules = {**VERSION_RULES, **validate_version_rules(extra_version_rules)}
+    if installed is not None:
+        current = dict(installed)
+    else:
+        current = installed_versions()
+        current.update({package: _installed_version(package) for package in rules})
     mismatches = []
-    for package, rule in VERSION_RULES.items():
+    for package, rule in rules.items():
         if rule is None or package not in recorded:
             continue
-        saved, now = str(recorded[package]), current[package]
+        saved, now = str(recorded[package]), current.get(package, _NOT_INSTALLED)
         differs = saved != now if rule == "exact" else _major_minor(saved) != _major_minor(now)
         if differs:
             mismatches.append(VersionMismatch(package, saved, now, rule))
