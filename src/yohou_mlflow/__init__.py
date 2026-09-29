@@ -24,7 +24,7 @@ from yohou_mlflow._persistence import (
     _load_pyfunc as _load_pyfunc,
 )
 from yohou_mlflow._pyfunc import INPUT_KEYS, PARAM_NAMES, PREDICTION_TYPES, YohouPyfuncModel
-from yohou_mlflow._trust import TRUSTED_TYPE_PREFIXES, TRUSTED_TYPES
+from yohou_mlflow._trust import TRUSTED_TYPE_PREFIXES, TRUSTED_TYPES, is_trusted
 from yohou_mlflow._versions import VERSION_RULES, VersionMismatch
 
 __version__ = version(__name__)
@@ -52,6 +52,7 @@ __all__ = [
     "__version__",
     "check_compatibility",
     "get_default_pip_requirements",
+    "is_trusted",
     "load_model",
     "log_model",
     "save_model",

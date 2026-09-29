@@ -475,3 +475,114 @@ def test_compatibility_report_text(point_case: Case, tmp_path: Path) -> None:
     edit_flavor(path, versions=dict(read_flavor(path)["versions"], yohou="0.0.0"))
     text = str(yohou_mlflow.check_compatibility(str(path)))
     assert text.startswith("Not loadable:\n  - A strict load would refuse the model")
+
+
+# -- Caller additions: trusted prefixes and version rules ---------------------------
+
+_LOCAL_PREFIX = "local_estimators."
+_LOCAL_RULES = {"local-estimators": "major.minor"}
+
+
+@pytest.fixture
+def local_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ``local_estimators`` look like the module of an installed distribution at 1.2.3."""
+    from yohou_mlflow import _versions
+
+    real = _versions.version
+    monkeypatch.setattr(
+        _versions, "packages_distributions", lambda: {"local_estimators": ["other-distribution", "local_estimators"]}
+    )
+    monkeypatch.setattr(_versions, "version", lambda name: "1.2.3" if name == "local-estimators" else real(name))
+
+
+def test_trusted_prefix_matches_a_package_only() -> None:
+    """A prefix trusts its package's modules and nothing that merely shares its spelling."""
+    assert is_trusted("mypkg.features.Lags", extra_trusted_prefixes=["mypkg."])
+    assert not is_trusted("mypkg_evil.Lags", extra_trusted_prefixes=["mypkg."])
+    assert untrusted_outside_policy(["mypkg.a.B", "other.C"], extra_trusted_prefixes=["mypkg."]) == ["other.C"]
+
+
+@pytest.mark.parametrize("prefix", ["mypkg", "."])
+def test_trusted_prefix_must_end_a_module(prefix: str, point_case: Case, tmp_path: Path) -> None:
+    """A prefix that does not end in a dot is refused before anything is written."""
+    with pytest.raises(ValueError, match="ending in '.'"):
+        is_trusted("mypkg.a.B", extra_trusted_prefixes=[prefix])
+    path = tmp_path / "model"
+    with pytest.raises(ValueError, match="ending in '.'"):
+        yohou_mlflow.save_model(point_case.forecaster, path, extra_trusted_prefixes=[prefix])
+    assert not path.exists()
+
+
+def test_trusted_prefix_at_save_load_and_check(local_ridge_case: Case, tmp_path: Path) -> None:
+    """A prefix passed at save must be passed again at load; the file cannot carry it."""
+    path = _saved(local_ridge_case, tmp_path, extra_trusted_prefixes=[_LOCAL_PREFIX])
+    loaded = yohou_mlflow.load_model(str(path), extra_trusted_prefixes=[_LOCAL_PREFIX])
+    assert loaded.predict().equals(local_ridge_case.forecaster.predict())
+    assert yohou_mlflow.check_compatibility(str(path), extra_trusted_prefixes=[_LOCAL_PREFIX]).loadable
+    with pytest.raises(UntrustedTypesError, match="extra_trusted_prefixes"):
+        yohou_mlflow.load_model(str(path))
+
+
+def test_log_model_passes_caller_additions(local_ridge_case: Case, tracking: str, local_distribution: None) -> None:
+    """``log_model`` forwards the prefixes and version rules to the save."""
+    with mlflow.start_run():
+        info = yohou_mlflow.log_model(
+            local_ridge_case.forecaster,
+            name="forecaster",
+            extra_trusted_prefixes=[_LOCAL_PREFIX],
+            extra_version_rules=_LOCAL_RULES,
+        )
+    local = mlflow.artifacts.download_artifacts(info.model_uri)
+    assert read_flavor(Path(local))["versions"]["local-estimators"] == "1.2.3"
+
+
+@pytest.mark.parametrize(
+    ("rules", "match"),
+    [({"yohou": "major.minor"}, "built in"), ({"Scikit_Learn": "exact"}, "built in"), ({"x": "major"}, "one of")],
+)
+def test_version_rules_are_checked(rules: dict, match: str, point_case: Case, tmp_path: Path) -> None:
+    """A rule cannot change a built-in package's rule, and must be a known comparison."""
+    with pytest.raises(ValueError, match=match):
+        yohou_mlflow.save_model(point_case.forecaster, tmp_path / "model", extra_version_rules=rules)
+    with pytest.raises(ValueError, match=match):
+        compare_versions({}, extra_version_rules=rules)
+
+
+def test_held_package_version_is_recorded(
+    local_ridge_case: Case, point_case: Case, tmp_path: Path, local_distribution: None
+) -> None:
+    """A declared package is recorded only by a model holding a type from it."""
+    held = _saved(
+        local_ridge_case, tmp_path / "held", extra_trusted_prefixes=[_LOCAL_PREFIX], extra_version_rules=_LOCAL_RULES
+    )
+    assert read_flavor(held)["versions"]["local-estimators"] == "1.2.3"
+    plain = _saved(point_case, tmp_path / "plain", extra_version_rules=_LOCAL_RULES)
+    assert "local-estimators" not in read_flavor(plain)["versions"]
+
+
+def test_held_package_minor_bump_refused(local_ridge_case: Case, tmp_path: Path, local_distribution: None) -> None:
+    """A load under the declared rule refuses a minor bump of the held package, naming it."""
+    kwargs = {"extra_trusted_prefixes": [_LOCAL_PREFIX], "extra_version_rules": _LOCAL_RULES}
+    path = _saved(local_ridge_case, tmp_path, **kwargs)
+    edit_flavor(path, versions=dict(read_flavor(path)["versions"], **{"local-estimators": "1.1.0"}))
+    with pytest.raises(VersionMismatchError, match=r"local-estimators: saved with 1\.1\.0, installed 1\.2\.3"):
+        yohou_mlflow.load_model(str(path), **kwargs)
+    report = yohou_mlflow.check_compatibility(str(path), **kwargs)
+    assert [m.package for m in report.version_mismatches] == ["local-estimators"]
+    edit_flavor(path, versions=dict(read_flavor(path)["versions"], **{"local-estimators": "1.2.0"}))
+    assert yohou_mlflow.load_model(str(path), **kwargs).predict().equals(local_ridge_case.forecaster.predict())
+
+
+def test_recorded_package_without_a_rule_is_not_compared() -> None:
+    """A recorded package is compared only under a rule the loader declares."""
+    installed = {**installed_versions(), "catboost": "1.3.0"}
+    recorded = {"catboost": "1.2.0"}
+    assert compare_versions(recorded, installed) == []
+    mismatches = compare_versions(recorded, installed, extra_version_rules={"catboost": "major.minor"})
+    assert [(m.package, m.recorded, m.installed) for m in mismatches] == [("catboost", "1.2.0", "1.3.0")]
+
+
+def test_uninstalled_rule_package_reported() -> None:
+    """A recorded package that is no longer installed breaks its rule."""
+    mismatches = compare_versions({"not-a-real-package": "1.0"}, extra_version_rules={"not-a-real-package": "exact"})
+    assert [m.installed for m in mismatches] == ["(not installed)"]

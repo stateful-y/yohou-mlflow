@@ -52,6 +52,14 @@ with mlflow.start_run():
     )
 ```
 
+To trust every class of a package you control rather than naming each one, pass its
+module prefix instead. The prefix must end in `.`, so `my_project.` does not also match
+a module named `my_project_extras`:
+
+```python
+yohou_mlflow.save_model(forecaster, "model", extra_trusted_prefixes=["my_project."])
+```
+
 ### 3. Pass the same types every time you load
 
 The saved model does not remember them. Keep the list in your code or configuration
@@ -63,6 +71,9 @@ If you load the forecaster itself:
 forecaster = yohou_mlflow.load_model("models:/daily-demand/latest", extra_trusted_types=trusted)
 ```
 
+Pass `extra_trusted_prefixes` the same way. `mlflow.pyfunc.load_model` accepts exact
+names only.
+
 If you load it through MLflow's generic interface, pass the list in `model_config`:
 
 ```python
@@ -73,6 +84,20 @@ model = mlflow.pyfunc.load_model(
     model_config={"extra_trusted_types": trusted},
 )
 ```
+
+### 4. Refuse a model saved with another version of the library
+
+A third-party estimator's fitted state can change between its minor releases. Declare a
+rule for its package when saving and when loading:
+
+```python
+rules = {"lightgbm": "major.minor"}
+yohou_mlflow.save_model(forecaster, "model", extra_trusted_types=trusted, extra_version_rules=rules)
+forecaster = yohou_mlflow.load_model("model", extra_trusted_types=trusted, extra_version_rules=rules)
+```
+
+The version is recorded only when the forecaster holds a type from that package, so a
+forecaster without it is never refused over a lightgbm upgrade.
 
 ## Troubleshooting
 

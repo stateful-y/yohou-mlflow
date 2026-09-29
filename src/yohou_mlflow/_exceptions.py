@@ -36,8 +36,8 @@ class UntrustedTypesError(YohouMlflowError):
             action = "Nothing from the file was constructed."
         super().__init__(
             f"The forecaster contains types outside yohou-mlflow's trust policy:\n{listed}\n"
-            f"{action} If you trust these types, pass them in `extra_trusted_types`, "
-            "both when saving and every time the model is loaded."
+            f"{action} If you trust these types, pass them in `extra_trusted_types`, or their "
+            "package in `extra_trusted_prefixes`, both when saving and every time the model is loaded."
         )
 
 

@@ -52,6 +52,11 @@ error names each package with both versions. yohou is compared exactly because i
 pre-1.0 and any release may change fitted state; patch releases of scikit-learn and
 polars are let through so that routine dependency updates do not force a refit.
 
+The same reasoning applies to a third-party estimator inside a forecaster, such as a
+gradient-boosting library whose fitted trees are stored in its own format. The caller
+declares a rule for that package; its version is recorded only by forecasters that hold
+one of its types, so a model without it is never refused over that package's upgrade.
+
 This is a trade-off. Upgrading yohou means refitting saved forecasters, or loading them
 with `strict=False` and checking the result. In exchange, the "loads, then misbehaves"
 failure becomes a clear refusal, and `check_compatibility` lets you find it before a
