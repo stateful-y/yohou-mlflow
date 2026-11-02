@@ -6,10 +6,10 @@ resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'emscripten'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'win32'",
-    "python_full_version < '3.12' and sys_platform == 'win32'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version >= '3.12' and python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
@@ -4754,7 +4754,7 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", specifier = ">=0.8.0" },
     { name = "rumdl", specifier = ">=0.1.33" },
-    { name = "ty", specifier = ">=0.0.12" },
+    { name = "ty", specifier = "==0.0.95" },
     { name = "watchdog", specifier = ">=4.0" },
     { name = "zensical", specifier = ">=0.0.51" },
 ]
@@ -4778,7 +4778,7 @@ lint = [
     { name = "interrogate", specifier = ">=1.7.0" },
     { name = "ruff", specifier = ">=0.8.0" },
     { name = "rumdl", specifier = ">=0.1.33" },
-    { name = "ty", specifier = ">=0.0.12" },
+    { name = "ty", specifier = "==0.0.95" },
 ]
 tests = [
     { name = "covdefaults", specifier = ">=2.3" },
